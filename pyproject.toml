@@ -1,0 +1,14 @@
+[project]
+name = "tutor-agent"
+version = "0.1.0"
+description = "LangGraph 멀티에이전트 학습 도우미"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langgraph>=0.4",
+    "langchain-google-genai>=2.1",
+    "langchain-core>=0.3",
+    "python-dotenv>=1.1",
+    "ipykernel>=7.2.0",
+    "langchain>=1.2.13",
+]
