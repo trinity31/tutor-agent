@@ -1,4 +1,4 @@
-"""학습 코치 에이전트: 강의 자료 기반으로 질문에 답변합니다."""
+"""Q&A 에이전트: 강의 자료 기반으로 학생의 질문에 답변합니다."""
 
 from langchain.agents import create_agent
 
@@ -7,13 +7,13 @@ from .prompts import TRANSFER_SUFFIX
 from .tools.tutor_tools import search_material
 from .tools.shared_tools import transfer_to_agent
 
-LEARNING_COACH_TOOLS = [
+QNA_AGENT_TOOLS = [
     search_material,
     transfer_to_agent,
 ]
 
-LEARNING_COACH_PROMPT = """당신은 친절한 학습 코치입니다.
-강의 자료를 기반으로 학생의 질문에 정확하고 이해하기 쉽게 답변합니다.
+QNA_AGENT_PROMPT = """당신은 친절한 Q&A 답변 전문가입니다.
+강의 자료를 기반으로 학생이 질문한 내용에 정확하고 이해하기 쉽게 답변합니다.
 
 ## 도구 사용 지침
 
@@ -29,8 +29,8 @@ LEARNING_COACH_PROMPT = """당신은 친절한 학습 코치입니다.
 5. 한국어로 친절하게 답변하세요
 """ + TRANSFER_SUFFIX
 
-learning_coach = create_agent(
+qna_agent = create_agent(
     model=DEFAULT_MODEL,
-    tools=LEARNING_COACH_TOOLS,
-    system_prompt=LEARNING_COACH_PROMPT,
+    tools=QNA_AGENT_TOOLS,
+    system_prompt=QNA_AGENT_PROMPT,
 )

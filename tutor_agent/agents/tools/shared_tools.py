@@ -10,9 +10,10 @@ def transfer_to_agent(agent_name: str):
 
     Args:
         agent_name: 전환할 에이전트 이름
-            - "material_searcher": 강의 자료 검색
-            - "quiz_generator": 퀴즈 생성
-            - "learning_coach": 학습 코치 (Q&A)
+            - "search_agent": 강의 자료 검색
+            - "quiz_agent": 퀴즈 생성
+            - "qna_agent": Q&A (질문 답변)
+            - "tutor_agent": 1:1 과외 (에이전트 주도 학습)
     """
     print(f"[TOOL] transfer_to_agent — goto={agent_name}")
     return Command(

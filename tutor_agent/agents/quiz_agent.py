@@ -7,13 +7,13 @@ from .prompts import TRANSFER_SUFFIX
 from .tools.tutor_tools import search_material, get_study_memos
 from .tools.shared_tools import transfer_to_agent
 
-QUIZ_GENERATOR_TOOLS = [
+QUIZ_AGENT_TOOLS = [
     search_material,
     get_study_memos,
     transfer_to_agent,
 ]
 
-QUIZ_GENERATOR_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니다.
+QUIZ_AGENT_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니다.
 강의 자료와 학습 메모를 기반으로 퀴즈를 생성합니다.
 
 ## 도구 사용 지침
@@ -39,8 +39,8 @@ QUIZ_GENERATOR_PROMPT = """당신은 대학 수준의 학습 평가 전문가입
 퀴즈를 JSON 형식으로 응답하세요.
 """ + TRANSFER_SUFFIX
 
-quiz_generator = create_agent(
+quiz_agent = create_agent(
     model=DEFAULT_MODEL,
-    tools=QUIZ_GENERATOR_TOOLS,
-    system_prompt=QUIZ_GENERATOR_PROMPT,
+    tools=QUIZ_AGENT_TOOLS,
+    system_prompt=QUIZ_AGENT_PROMPT,
 )
