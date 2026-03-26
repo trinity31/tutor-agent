@@ -1,0 +1,17 @@
+{
+    "dependencies": [
+        "tutor_agent/agents/graph.py",
+        "tutor_agent/agents/state.py",
+        "tutor_agent/agents/supervisor_agent.py",
+        "tutor_agent/agents/search_agent.py",
+        "tutor_agent/agents/quiz_agent.py",
+        "tutor_agent/agents/qna_agent.py",
+        "tutor_agent/agents/tutor_agent.py",
+        "tutor_agent/agents/tools/shared_tools.py",
+        "tutor_agent/agents/tools/tutor_tools.py"
+    ],
+    "graphs": {
+        "tutor": "tutor_agent.agents.graph:graph"
+    },
+    "env": "./.env"
+}

@@ -66,4 +66,4 @@ def build_graph():
 
 
 # LangSmith Studio용 (모듈 레벨 컴파일)
-# tutor_agent = _build_graph().compile()
+graph = _build_graph().compile()

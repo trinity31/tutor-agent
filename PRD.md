@@ -83,11 +83,11 @@
 
 | 단계 | 동작 | 에이전트 |
 |------|------|---------|
-| `/start` | 세션 시작, 자료 사전 검색 | material_searcher |
-| 학습 중 | `/memo`, `/ask` 자유 입력 | learning_coach |
-| "다 들었어" | 이해도 확인 질문 3~5개 시작 | **tutor_session** (신규) |
-| 이해도 확인 | 정답 → 다음 질문, 오답 → 보충 설명 + 취약점 기록 | tutor_session |
-| `/done` | 세션 요약 + 학습완료 기록 | tutor_session |
+| `/start` | 세션 시작, 자료 사전 검색 | search_agent |
+| 학습 중 | `/memo`, `/ask` 자유 입력 | qna_agent |
+| "다 들었어" | 이해도 확인 질문 3~5개 시작 | tutor_agent |
+| 이해도 확인 | 정답 → 다음 질문, 오답 → 보충 설명 + 취약점 기록 | tutor_agent |
+| `/done` | 세션 요약 + 학습완료 기록 | tutor_agent |
 
 **이해도 확인 규칙:**
 - 자료에서 핵심 개념 3~5개를 선별하여 **개방형 질문** (선택지 없음)
@@ -250,46 +250,108 @@
 
 ## 3. 아키텍처
 
-### 3.1 시스템 구성
+### 3.1 확장 가능한 3-Layer 구조
 
 ```
-┌─────────────────────────────────────────────┐
-│                플랫폼 어댑터                  │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │ Slack    │  │ 카카오톡  │  │ LangSmith │  │
-│  │ Adapter  │  │ Adapter  │  │ (테스트)   │  │
-│  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
-│       │              │              │        │
-│       └──────────────┼──────────────┘        │
-│                      │                       │
-│              graph.ainvoke(state)             │
-│                      │                       │
-│  ┌───────────────────┼───────────────────┐   │
-│  │          LangGraph Agent Core         │   │
-│  │                                       │   │
-│  │  ┌─────────────────────────────┐      │   │
-│  │  │      Supervisor Agent       │      │   │
-│  │  │   (자연어 분석 + 라우팅)      │      │   │
-│  │  └──────────┬──────────────────┘      │   │
-│  │             │ transfer_to_agent()     │   │
-│  │    ┌────────┼────────┬─────────┬────────┐  │
-│  │    ▼        ▼        ▼         ▼        ▼  │
-│  │ Material  Quiz    Learning  Tutor    Analytics│
-│  │ Searcher  Gen     Coach    Session  (Phase4) │
-│  │    │        │        │                │   │
-│  │    ▼        ▼        ▼                │   │
-│  │  [도구]   [도구]   [도구]              │   │
-│  │                                       │   │
-│  └───────────────────────────────────────┘   │
-│                      │                       │
-│              ┌───────┼───────┐               │
-│              ▼       ▼       ▼               │
-│           Gemini   GCS    File Search        │
-│           API     Storage   Store            │
-└─────────────────────────────────────────────┘
+═══════════════════════════════════════════════════════════════
+
+[Layer 3: Platform Adapters] ← 플랫폼별 I/O만
+  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │  Slack   │  │ REST API │  │ 카카오톡  │  │LangSmith │
+  │ Adapter  │  │ (FastAPI)│  │ Adapter  │  │  (테스트) │
+  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+       │              │              │              │
+       └──────────────┼──────────────┼──────────────┘
+                      │              │
+                      ▼              ▼
+[Layer 2: Service Layer] ← 비즈니스 로직 (상태 조립 + 결과 파싱)
+  tutor_agent/service.py
+  - handle_message(user_message, command_type, user_id) → dict
+  - graph.ainvoke()를 직접 호출하는 유일한 곳
+                      │
+                      ▼
+[Layer 1: Agent Core] ← 순수 LangGraph, 플랫폼 무관
+  tutor_agent/agents/
+  ┌─────────────────────────────────────────────────────┐
+  │  ┌─────────────────────────────┐                    │
+  │  │    Supervisor Agent         │                    │
+  │  │   (자연어 분석 + 라우팅)      │                    │
+  │  └──────────┬──────────────────┘                    │
+  │             │ transfer_to_agent()                   │
+  │    ┌────────┼────────┬──────────┐                   │
+  │    ▼        ▼        ▼          ▼                   │
+  │  search   quiz     qna       tutor                 │
+  │  _agent   _agent   _agent    _agent                │
+  │    │        │        │          │                   │
+  │    ▼        ▼        ▼          ▼                   │
+  │  [도구]   [도구]   [도구]     [도구]                 │
+  └─────────────────────────────────────────────────────┘
+                      │
+              ┌───────┼───────┐
+              ▼       ▼       ▼
+           Gemini   GCS    File Search
+           API     Storage   Store
+
+═══════════════════════════════════════════════════════════════
 ```
 
-### 3.2 기술 스택
+**핵심 원칙:**
+
+| 원칙 | 구체적 규칙 |
+|------|------------|
+| Layer 1에 플랫폼 코드 금지 | `import slack_sdk` 같은 것이 `agents/` 폴더에 있으면 안 됨 |
+| Service Layer가 유일한 진입점 | 어댑터들은 `service.py`만 호출, `graph.ainvoke()` 직접 호출 금지 |
+| 상태는 dict로 통일 | Slack event도 dict, HTTP body도 dict → 같은 Service 함수 호출 |
+
+### 3.2 Service Layer
+
+```python
+# tutor_agent/service.py
+from .agents.graph import build_graph
+
+graph = build_graph()
+
+async def handle_message(user_message: str, command_type: str = "", user_id: str = "") -> dict:
+    """플랫폼 독립적인 메시지 처리 — 모든 어댑터가 이 함수만 호출."""
+    state = {
+        "messages": [("user", user_message)],
+        "command_type": command_type,
+        "user_message": user_message,
+    }
+    result = await graph.ainvoke(state)
+    # AI 응답 메시지 추출
+    ai_messages = [m for m in result["messages"] if m.type == "ai" and m.content]
+    return {
+        "response": ai_messages[-1].content if ai_messages else "",
+        "state": result,
+    }
+```
+
+### 3.3 시스템 구성 (전체 뷰)
+
+```
+┌─────────────────────────────────────────────────┐
+│            Platform Adapters (Layer 3)           │
+│  ┌──────────┐ ┌──────────┐ ┌────────┐ ┌──────┐ │
+│  │  Slack   │ │ REST API │ │카카오톡 │ │Studio│ │
+│  └────┬─────┘ └────┬─────┘ └───┬────┘ └──┬───┘ │
+│       └─────────────┼──────────┼─────────┘     │
+│                     ▼                           │
+│           Service Layer (Layer 2)               │
+│           service.handle_message()              │
+│                     │                           │
+│                     ▼                           │
+│           Agent Core (Layer 1)                  │
+│           graph.ainvoke(state)                  │
+│                     │                           │
+│              ┌──────┼──────┐                    │
+│              ▼      ▼      ▼                    │
+│           Gemini  GCS   File Search             │
+│           API    Storage  Store                 │
+└─────────────────────────────────────────────────┘
+```
+
+### 3.4 기술 스택
 
 | 구성요소 | 기술 | 버전 |
 |---------|------|------|
@@ -303,39 +365,42 @@
 | 향후 UI | 카카오톡 채널 봇 | 추후 |
 | 모니터링 | LangSmith | 개발/테스트 |
 
-### 3.3 디렉토리 구조
+### 3.5 디렉토리 구조
 
 ```
 tutor-agent/
 ├── .env                           # API 키 (GOOGLE_API_KEY)
 ├── pyproject.toml                 # 의존성 관리 (uv)
 ├── main.py                        # 진입점
+├── setup_store.py                 # File Search Store 초기화 스크립트
 ├── file_manifest.json             # File Search Store 파일 목록 캐시
 │
 ├── tutor_agent/
 │   ├── __init__.py
 │   ├── config.py                  # 환경변수, KST, 싱글턴
+│   ├── service.py                 # Service Layer (Layer 2) — 유일한 graph 진입점
+│   ├── file_search.py             # Gemini File Search Store 유틸리티
 │   ├── storage.py                 # GCS CRUD (completions, quizzes, memos, profiles)
 │   │
-│   ├── agents/
+│   ├── agents/                    # Agent Core (Layer 1) — 순수 LangGraph, 플랫폼 무관
 │   │   ├── __init__.py            # 모델 상수 (SUPERVISOR_MODEL, SPECIALIST_MODEL)
 │   │   ├── state.py               # TutorAgentState(MessagesState)
 │   │   ├── graph.py               # StateGraph 빌드 + 컴파일
 │   │   ├── prompts.py             # 공통 프롬프트 (TRANSFER_SUFFIX)
 │   │   ├── supervisor_agent.py    # Supervisor (자연어 라우팅)
-│   │   ├── material_searcher.py   # 자료 검색 + 검증
-│   │   ├── quiz_generator.py      # 퀴즈 생성 + 품질 검증
-│   │   ├── learning_coach.py      # 질문 답변
-│   │   ├── tutor_session.py       # 과외 세션 (이해도 확인 + 보충 설명)
-│   │   ├── analytics.py           # 오답 분석 (Phase 4)
+│   │   ├── search_agent.py        # 자료 검색 + 검증
+│   │   ├── quiz_agent.py          # 퀴즈 생성 + 품질 검증
+│   │   ├── qna_agent.py           # 질문 답변
+│   │   ├── tutor_agent.py         # 과외 세션 (이해도 확인 + 보충 설명)
 │   │   └── tools/
 │   │       ├── __init__.py
 │   │       ├── shared_tools.py    # transfer_to_agent (Command 패턴)
 │   │       └── tutor_tools.py     # search_material, get_study_memos, save_memo
 │   │
-│   └── platforms/
+│   └── platforms/                 # Platform Adapters (Layer 3)
 │       ├── __init__.py
-│       ├── slack_app.py           # Slack 어댑터 (graph.ainvoke 호출)
+│       ├── slack_app.py           # Slack 어댑터 (service.handle_message 호출)
+│       ├── api.py                 # REST API 어댑터 (FastAPI)
 │       └── kakao_app.py           # 카카오 어댑터 (추후)
 │
 ├── notebooks/
@@ -344,7 +409,7 @@ tutor-agent/
 └── tests/                         # 테스트 (추후)
 ```
 
-### 3.4 State 스키마
+### 3.6 State 스키마
 
 ```python
 from langgraph.graph import MessagesState
@@ -386,7 +451,7 @@ class TutorAgentState(MessagesState):
     error: str = ""                     # 에러 메시지 (플랫폼 어댑터에서 사용)
 ```
 
-### 3.5 그래프 흐름
+### 3.7 그래프 흐름
 
 ```
 [Slash Command]                           [자연어 메시지]
@@ -395,28 +460,30 @@ class TutorAgentState(MessagesState):
   command_type="quiz"                    Supervisor가 분석
   user_message="풍수학개론 3주차"                 │
         │                                       │
-        └───────────── graph.ainvoke(state) ─────┘
-                              │
-                     ┌────────┼────────┬──────────┐
-                     ▼        ▼        ▼          ▼
-              material_    quiz_    learning_   tutor_
-              searcher    generator   coach    session
-                 │           │          │         │
-           search_material   │    search_material │
-                 │           │          │         │
-           검증 (≥1500자)    │     자료 답변   이해도 확인
-                 │           │          │      3~5문제
-              transfer →  생성+검증     │         │
-                         (최대 3회)   END    정답→칭찬
-                             │            오답→보충설명
-                            END           취약점 기록
-                                             │
-                                          세션 요약
-                                             │
-                                            END
+        └──── service.handle_message() ─────────┘
+                         │
+                  graph.ainvoke(state)
+                         │
+                ┌────────┼────────┬──────────┐
+                ▼        ▼        ▼          ▼
+             search    quiz     qna       tutor
+             _agent    _agent   _agent    _agent
+                │        │        │          │
+          search_material │  search_material │
+                │        │        │          │
+          검증 (≥1500자)  │    자료 답변   이해도 확인
+                │        │        │       3~5문제
+             transfer → 생성+검증  │          │
+                        (최대 3회) END   정답→칭찬
+                            │          오답→보충설명
+                           END          취약점 기록
+                                            │
+                                         세션 요약
+                                            │
+                                           END
 ```
 
-### 3.6 에이전트 전환 패턴 (catbot-backend 참조)
+### 3.8 에이전트 전환 패턴 (catbot-backend 참조)
 
 ```python
 # shared_tools.py
@@ -429,15 +496,29 @@ def transfer_to_agent(agent_name: str):
 
     Args:
         agent_name: 전환할 에이전트 이름
-            - "material_searcher": 자료 검색
-            - "quiz_generator": 퀴즈 생성
-            - "learning_coach": 학습 코치
+            - "search_agent": 자료 검색
+            - "quiz_agent": 퀴즈 생성
+            - "qna_agent": Q&A (질문 답변)
+            - "tutor_agent": 1:1 과외
     """
     return Command(
         goto=agent_name,
         graph=Command.PARENT,
         update={"current_agent": agent_name},
     )
+```
+
+### 3.9 LangSmith Studio 개발 UI
+
+개발 단계에서는 LangSmith Studio를 활용하여 Web UI 없이도 에이전트를 대화형으로 테스트합니다.
+
+```python
+# graph.py 마지막에 모듈 레벨 컴파일 추가
+graph = _build_graph().compile()  # LangSmith Studio에서 바로 테스트 가능
+```
+
+```bash
+langgraph dev  # 로컬 Studio 실행
 ```
 
 ---
@@ -543,45 +624,57 @@ gs://quiz-bot-data-494801/
 
 ---
 
-## 6. 플랫폼 어댑터
+## 6. 플랫폼 어댑터 (Layer 3)
 
 ### 6.1 어댑터 인터페이스
 
-모든 플랫폼 어댑터는 동일한 패턴으로 에이전트를 호출합니다:
+모든 플랫폼 어댑터는 **Service Layer만 호출**합니다. `graph.ainvoke()`를 직접 호출하지 않습니다:
 
 ```python
 # 플랫폼 어댑터의 역할:
-# 1. 사용자 입력 파싱 → TutorAgentState 구성
-# 2. graph.ainvoke(state) 호출
+# 1. 사용자 입력 파싱 (Slack event → dict, HTTP body → dict)
+# 2. service.handle_message() 호출
 # 3. 결과를 플랫폼 UI로 포맷팅/전송
 
+from tutor_agent.service import handle_message
+
 async def handle_command(command_type, text, user_id):
-    state = {
-        "messages": [("user", text)],
-        "command_type": command_type,
-        "user_message": text,
-    }
-    result = await graph.ainvoke(state)
+    result = await handle_message(text, command_type, user_id)
     # 플랫폼별 UI 렌더링
     return format_response(result)
 ```
 
-### 6.2 Slack 어댑터 (현재)
+### 6.2 Slack 어댑터
 
 | Slack Command | → command_type | → 에이전트 |
 |---------------|---------------|-----------|
 | `/start 양택풍수론 4주차` | `start` | 세션 시작 (저장만) |
 | `/memo 팔작지붕 중요` | `memo` | 메모 저장 |
 | `/done` | `done` | 세션 종료 + 학습완료 기록 |
-| `/quiz 양택풍수론 4주차` | `quiz` | material_searcher → quiz_generator |
-| `/ask 음양오행이란?` | `ask` | material_searcher → learning_coach |
+| `/quiz 양택풍수론 4주차` | `quiz` | search_agent → quiz_agent |
+| `/ask 음양오행이란?` | `ask` | search_agent → qna_agent |
 
 **퀴즈 UI**: Slack Block Kit (Header + Section + Buttons)
 **답변 처리**: `block_actions` 이벤트 핸들러
 
-### 6.3 카카오톡 어댑터 (추후)
+### 6.3 REST API 어댑터 (FastAPI)
 
-카카오 챗봇 API 연동. 핵심 로직(graph.ainvoke)은 동일하고 UI 렌더링만 카카오 형식으로 변환.
+```python
+# tutor_agent/platforms/api.py
+from fastapi import FastAPI
+from ..service import handle_message
+
+app = FastAPI()
+
+@app.post("/chat")
+async def chat(body: ChatRequest):
+    result = await handle_message(body.message, body.command_type, body.user_id)
+    return {"response": result["response"]}
+```
+
+### 6.4 카카오톡 어댑터 (추후)
+
+카카오 챗봇 API 연동. 핵심 로직(`service.handle_message`)은 동일하고 UI 렌더링만 카카오 형식으로 변환.
 
 ---
 
@@ -680,6 +773,6 @@ TutorAgent는 catbot-backend의 아키텍처 패턴을 따릅니다:
 - File Search Store: 과목 추가 시 PDF 업로드 + manifest 갱신만 필요
 
 ### 10.4 안전 전략
-- `config.USE_LANGGRAPH` 플래그로 기존 로직 폴백 가능
-- 기존 `quiz_manager.py` 병행 유지 (Phase 2 완료 전까지)
+- 기존 Quiz-Bot의 `quiz_manager.py` 로직을 참고하되, 에이전트 구조로 재구축
 - GCS 데이터 형식 하위 호환 유지
+- Service Layer를 통한 진입점 단일화로 플랫폼 간 일관성 보장
