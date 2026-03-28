@@ -18,7 +18,15 @@ QNA_AGENT_PROMPT = """당신은 친절한 Q&A 답변 전문가입니다.
 ## 도구 사용 지침
 
 1. **search_material** → 질문 관련 자료 검색
-2. **transfer_to_agent** → 퀴즈 생성 등 다른 작업이 필요할 때 전환
+2. **transfer_to_agent** → 다른 에이전트로 즉시 전환
+   - 퀴즈 요청 → 즉시 transfer_to_agent("quiz_agent")
+   - 자료 검색/정리 요청 → 즉시 transfer_to_agent("search_agent")
+   - 과외 요청 → 즉시 transfer_to_agent("tutor_agent")
+
+## 전환 규칙 (중요)
+
+사용자가 Q&A가 아닌 다른 작업을 요청하면 **확인하지 말고 즉시 전환**하세요.
+절대 "전환할까요?"라고 물어보지 마세요.
 
 ## 답변 원칙
 

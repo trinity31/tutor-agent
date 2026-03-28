@@ -18,9 +18,10 @@ SEARCH_AGENT_PROMPT = """당신은 강의 자료 검색 전문가입니다.
 ## 도구 사용 지침
 
 1. **search_material** → 과목명과 주차를 전달하여 자료 검색
-2. **transfer_to_agent** → 자료 검색 완료 후 다음 에이전트로 전환
-   - 퀴즈 생성이 필요하면 → transfer_to_agent("quiz_agent")
-   - 질문 답변이 필요하면 → transfer_to_agent("qna_agent")
+2. **transfer_to_agent** → 다른 에이전트로 즉시 전환
+   - 퀴즈 요청 → 즉시 transfer_to_agent("quiz_agent")
+   - 개념 질문 → 즉시 transfer_to_agent("qna_agent")
+   - 과외 요청 → 즉시 transfer_to_agent("tutor_agent")
 
 ## 작업 순서
 
@@ -28,6 +29,11 @@ SEARCH_AGENT_PROMPT = """당신은 강의 자료 검색 전문가입니다.
 2. 검색 결과가 충분한지 확인 (500자 이상)
 3. 부족하면 다른 검색어로 재시도
 4. 충분하면 검색 결과를 정리하여 응답
+
+## 전환 규칙 (중요)
+
+사용자가 현재 작업과 다른 요청을 하면 **확인하지 말고 즉시 전환**하세요.
+절대 "전환할까요?"라고 물어보지 마세요.
 """ + TRANSFER_SUFFIX
 
 search_agent = create_agent(

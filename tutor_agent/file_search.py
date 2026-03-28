@@ -1,0 +1,301 @@
+"""Gemini File Search Store 서비스 — 업로드, 검색, manifest 관리.
+
+이 모듈이 File Search Store의 유일한 접근점입니다.
+CLI(setup_store.py), REST API, LangGraph 도구 모두 이 모듈을 통해 접근합니다.
+
+사용자별 구조:
+    materials/{user_id}/           ← PDF 보관
+    materials/{user_id}/manifest.json  ← 자동 생성
+    Store display_name: tutor-{user_id}
+"""
+
+import json
+import logging
+import os
+import shutil
+import tempfile
+import time
+
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# --- 설정 ---
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+GEMINI_MODEL = "gemini-2.5-flash"
+FILE_SEARCH_STORE_NAME = os.environ.get("FILE_SEARCH_STORE_NAME", "")
+DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "")
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MATERIALS_DIR = os.path.join(_PROJECT_ROOT, "materials")
+
+# --- 클라이언트 (싱글턴) ---
+_client: genai.Client | None = None
+
+
+def get_client() -> genai.Client:
+    """Gemini API 클라이언트를 반환합니다 (싱글턴)."""
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=GOOGLE_API_KEY)
+    return _client
+
+
+def _get_manifest_path(user_id: str = "") -> str:
+    """사용자별 manifest 경로를 반환합니다."""
+    if user_id:
+        return os.path.join(_MATERIALS_DIR, user_id, "manifest.json")
+    return os.path.join(_PROJECT_ROOT, "file_manifest.json")
+
+
+# ============================================================
+# Store 관리 (setup_store.py에서 호출)
+# ============================================================
+
+
+def get_or_create_store(display_name: str) -> str:
+    """File Search Store를 찾거나 새로 생성합니다.
+
+    Returns:
+        store_name (예: 'fileSearchStores/xxx')
+    """
+    client = get_client()
+
+    # 기존 스토어 검색
+    for store in client.file_search_stores.list():
+        if store.display_name == display_name:
+            logger.info(f"기존 스토어 발견: {store.name}")
+            return store.name
+
+    # 새 스토어 생성
+    store = client.file_search_stores.create(
+        config={"display_name": display_name}
+    )
+    logger.info(f"스토어 생성 완료: {store.name}")
+    return store.name
+
+
+def delete_store(store_name: str):
+    """File Search Store를 삭제합니다."""
+    client = get_client()
+    client.file_search_stores.delete(name=store_name, config={"force": True})
+    logger.info(f"스토어 삭제: {store_name}")
+
+
+def upload_pdf(store_name: str, file_path: str, display_name: str):
+    """PDF 파일을 File Search Store에 업로드하고 인덱싱합니다.
+
+    Args:
+        store_name: File Search Store 이름
+        file_path: PDF 파일 절대경로
+        display_name: Store 내 표시 이름 (과목-주차 식별용)
+    """
+    client = get_client()
+
+    # 한글 경로 대응: ASCII 이름으로 임시 복사
+    with tempfile.TemporaryDirectory() as tmpdir:
+        safe_name = "upload.pdf"
+        tmp_path = os.path.join(tmpdir, safe_name)
+        shutil.copy2(file_path, tmp_path)
+
+        uploaded = client.files.upload(
+            file=tmp_path, config={"display_name": display_name}
+        )
+
+        op = client.file_search_stores.import_file(
+            file_search_store_name=store_name,
+            file_name=uploaded.name,
+        )
+
+        # 인덱싱 완료 대기
+        while not op.done:
+            time.sleep(2)
+            op = client.operations.get(op)
+
+    logger.info(f"업로드 완료: {display_name}")
+
+
+def upload_pdfs(store_name: str, files: list[tuple[str, str]]):
+    """여러 PDF 파일을 일괄 업로드합니다.
+
+    Args:
+        store_name: File Search Store 이름
+        files: (절대경로, display_name) 튜플 리스트
+    """
+    client = get_client()
+    print(f"\n총 {len(files)}개 PDF 업로드 시작...\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        operations = []
+        for i, (file_path, display_name) in enumerate(files):
+            safe_name = f"course_{i:03d}.pdf"
+            tmp_path = os.path.join(tmpdir, safe_name)
+            shutil.copy2(file_path, tmp_path)
+
+            print(f"  [{i + 1}/{len(files)}] 업로드: {display_name}")
+            uploaded = client.files.upload(
+                file=tmp_path, config={"display_name": display_name}
+            )
+
+            op = client.file_search_stores.import_file(
+                file_search_store_name=store_name,
+                file_name=uploaded.name,
+            )
+            operations.append((display_name, op))
+
+        print("\n인덱싱 대기 중...")
+        for display_name, op in operations:
+            while not op.done:
+                time.sleep(2)
+                op = client.operations.get(op)
+            print(f"  완료: {display_name}")
+
+    print(f"\n전체 {len(files)}개 PDF 업로드 및 인덱싱 완료!")
+
+
+def save_manifest(display_names: list[str], user_id: str = "") -> list[str]:
+    """display_name 목록을 manifest.json에 저장합니다.
+
+    업로드 시점에 수집한 display_name 리스트를 저장합니다.
+    (Store의 document API는 원본 display_name을 보존하지 않으므로
+     업로드 시 직접 수집해야 합니다.)
+
+    Args:
+        display_names: 파일 display_name 리스트
+        user_id: 사용자 ID (미지정 시 프로젝트 루트에 저장)
+
+    Returns:
+        정렬된 display_name 리스트
+    """
+    display_names = sorted(display_names)
+
+    manifest_path = _get_manifest_path(user_id)
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+
+    with open(manifest_path, "w") as f:
+        json.dump(display_names, f, ensure_ascii=False, indent=2)
+
+    logger.info(f"manifest 저장: {len(display_names)}개 → {manifest_path}")
+    return display_names
+
+
+# ============================================================
+# 검색 (tutor_tools.py에서 호출)
+# ============================================================
+
+# manifest 캐시 (user_id → list[str])
+_manifest_cache: dict[str, list[str]] = {}
+
+
+def load_manifest(user_id: str = "") -> list[str]:
+    """manifest.json에서 display_name 목록을 로드합니다."""
+    if user_id not in _manifest_cache:
+        manifest_path = _get_manifest_path(user_id)
+        try:
+            with open(manifest_path) as f:
+                _manifest_cache[user_id] = json.load(f)
+            logger.info(f"manifest 로드: {len(_manifest_cache[user_id])}개 ({manifest_path})")
+        except FileNotFoundError:
+            logger.warning(f"manifest 없음: {manifest_path}")
+            _manifest_cache[user_id] = []
+    return _manifest_cache[user_id]
+
+
+def find_matching_file(subject: str, user_id: str = "") -> str | None:
+    """LLM을 사용하여 사용자 입력과 가장 일치하는 파일 display_name을 찾습니다.
+
+    예: '양택풍수론 4주차' → '양택풍수론 - 제04주차_전통건축의 이해 한옥과 문화재 풍수'
+    """
+    display_names = load_manifest(user_id or DEFAULT_USER_ID)
+    if not display_names:
+        return None
+
+    client = get_client()
+    manifest_list = "\n".join(f"- {name}" for name in display_names)
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"사용자 입력: \"{subject}\"\n\n"
+            f"아래 파일 목록에서 사용자가 요청한 과목과 주차에 가장 정확히 일치하는 파일을 하나만 골라주세요.\n"
+            f"일치하는 파일이 없으면 null을 반환하세요.\n\n"
+            f"파일 목록:\n{manifest_list}\n\n"
+            '반드시 아래 JSON 형식으로만 응답: {"match": "파일명" 또는 null}'
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+        matched = result.get("match")
+        if matched and matched in display_names:
+            logger.info(f"매칭: '{subject}' → '{matched}'")
+            return matched
+    except (json.JSONDecodeError, AttributeError):
+        logger.warning(f"매칭 파싱 실패: {subject}")
+
+    return None
+
+
+def search(
+    query: str,
+    user_message: str = "",
+    display_name: str = "",
+    store_name: str = "",
+    user_id: str = "",
+) -> str:
+    """Gemini File Search로 강좌 자료를 검색합니다.
+
+    Args:
+        query: 검색 쿼리 (예: '풍수학개론 3주차 핵심 내용')
+        user_message: 원본 사용자 입력 — LLM으로 파일 매칭 (자연어 입력 시)
+        display_name: 정확한 파일 display_name — LLM 매칭 건너뜀 (버튼 선택 시)
+        store_name: Store 이름 (미지정 시 환경변수 사용)
+        user_id: 사용자 ID (사용자별 manifest 로드용)
+
+    Returns:
+        검색된 자료 텍스트
+    """
+    target_store = store_name or FILE_SEARCH_STORE_NAME
+    if not target_store:
+        return "FILE_SEARCH_STORE_NAME이 설정되지 않았습니다. setup_store.py를 먼저 실행하세요."
+
+    # display_name이 직접 주어지면 LLM 매칭 건너뜀
+    file_hint = ""
+    effective_user_id = user_id or DEFAULT_USER_ID
+    matched_file = display_name or (
+        find_matching_file(user_message, effective_user_id) if user_message else None
+    )
+    if matched_file:
+        file_hint = (
+            f"\n검색 대상 파일: \"{matched_file}\"\n"
+            "이 파일의 내용만 정리해주세요."
+        )
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"다음 강좌 자료에서 관련 내용을 찾아서 핵심 개념, 주요 용어, "
+            f"중요 내용을 상세히 정리해줘: {query}\n\n"
+            f"중요: 반드시 요청된 특정 주차/강의 자료의 내용만 정리해주세요. "
+            f"다른 주차나 다른 강의의 내용은 절대 포함하지 마세요."
+            f"{file_hint}"
+        ),
+        config=types.GenerateContentConfig(
+            tools=[
+                types.Tool(
+                    file_search=types.FileSearch(
+                        file_search_store_names=[target_store]
+                    )
+                )
+            ]
+        ),
+    )
+    return response.text

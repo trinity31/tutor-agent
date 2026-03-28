@@ -12,4 +12,5 @@ dependencies = [
     "ipykernel>=7.2.0",
     "langchain>=1.2.13",
     "langgraph-cli[inmem]>=0.2",
+    "google-genai>=1.0",
 ]

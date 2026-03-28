@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# 학습자료 (PDF는 제외, 폴더 구조만 유지)
+materials/**/*.pdf
+materials/**/manifest.json
+.gstack/

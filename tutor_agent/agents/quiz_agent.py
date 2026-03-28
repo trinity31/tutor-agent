@@ -20,7 +20,15 @@ QUIZ_AGENT_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니�
 
 1. **search_material** → 자료가 아직 없으면 검색
 2. **get_study_memos** → 해당 과목의 학습 메모 조회
-3. **transfer_to_agent** → 다른 에이전트로 전환 필요 시
+3. **transfer_to_agent** → 다른 에이전트로 즉시 전환
+   - 자료 검색/정리 요청 → 즉시 transfer_to_agent("search_agent")
+   - 개념 질문 → 즉시 transfer_to_agent("qna_agent")
+   - 과외 요청 → 즉시 transfer_to_agent("tutor_agent")
+
+## 전환 규칙 (중요)
+
+사용자가 퀴즈가 아닌 다른 작업을 요청하면 **확인하지 말고 즉시 전환**하세요.
+절대 "전환할까요?"라고 물어보지 마세요.
 
 ## 퀴즈 생성 규칙
 

@@ -1,7 +1,15 @@
-"""학습 도우미 도메인 도구 (dummy 구현)."""
+"""학습 도우미 도메인 도구."""
 
 import json
+import logging
+
 from langchain_core.tools import tool
+
+from tutor_agent.file_search import search as file_search
+
+logger = logging.getLogger(__name__)
+
+_MIN_MATERIAL_LENGTH = 1500
 
 
 @tool
@@ -14,23 +22,23 @@ def search_material(subject: str) -> str:
     Returns:
         검색된 강의 자료 내용 (JSON 문자열)
     """
-    print(f"[TOOL] search_material — subject={subject}")
+    logger.info(f"[TOOL] search_material — subject={subject}")
 
-    # --- dummy 데이터 ---
+    # 1차 검색
+    query = f"{subject} 강의의 핵심 개념, 주요 용어, 중요 내용을 모두 정리해줘"
+    content = file_search(query=query, user_message=subject)
+
+    # 결과 부족 시 2차 검색 (쿼리 변형)
+    if len(content.strip()) < _MIN_MATERIAL_LENGTH:
+        logger.info(f"[TOOL] 1차 검색 결과 부족 ({len(content.strip())}자), 재시도")
+        query2 = f"{subject} 강의 전체 내용을 최대한 상세하게 정리해줘"
+        content = file_search(query=query2, user_message=subject)
+
     result = {
         "subject": subject,
-        "content": (
-            f"[{subject}] 강의 자료 내용\n\n"
-            f"1. 핵심 개념: {subject}의 기본 원리와 역사적 배경\n"
-            f"2. 주요 용어: 용어A(정의), 용어B(정의), 용어C(정의)\n"
-            f"3. 중요 내용: 이론적 프레임워크와 실제 적용 사례\n"
-            f"4. 심화 내용: 최신 연구 동향과 학술적 논의\n"
-            f"5. 실습 요소: 현장 적용 방법론과 분석 기법\n"
-        ),
-        "char_count": 500,
+        "content": content,
+        "char_count": len(content),
     }
-    # --- dummy 끝 ---
-
     return json.dumps(result, ensure_ascii=False)
 
 
