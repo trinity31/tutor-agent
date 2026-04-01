@@ -19,9 +19,8 @@ AGENT_NODES = {
 }
 
 
-def router_check(state: TutorAgentState):
-    current_agent = state.get("current_agent", "supervisor_agent")
-    return current_agent
+def router_check(_state: TutorAgentState):
+    return "supervisor_agent"
 
 
 def _build_graph() -> StateGraph:
@@ -60,9 +59,9 @@ def _build_graph() -> StateGraph:
     return graph_builder
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     """컴파일된 그래프를 반환합니다."""
-    return _build_graph().compile()
+    return _build_graph().compile(checkpointer=checkpointer)
 
 
 # LangSmith Studio용 (모듈 레벨 컴파일)

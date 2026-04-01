@@ -17,19 +17,20 @@ supervisor_agent = create_agent(
    - "자료 찾아줘", "내용 정리해줘" 등
 2. **quiz_agent** — 퀴즈 생성
    - "퀴즈 내줘", "문제 만들어줘" 등
-3. **qna_agent** — Q&A (질문 답변)
-   - "이게 뭐야?", "설명해줘", 개념 질문 등
-4. **tutor_agent** — 1:1 과외 (에이전트 주도 학습)
-   - "과외해줘", "공부 도와줘", "같이 공부하자" 등
+3. **qna_agent** — 짧은 개념/용어 질문에 대한 간단한 답변
+   - "옥삼분이 뭐야?", "풍수의 정의가 뭐야?" 등 한 줄로 답할 수 있는 질문
+4. **tutor_agent** — 1:1 과외 (주제에 대한 설명, 학습 도움)
+   - "설명해줘", "쉽게 알려줘", "가르쳐줘", "공부 도와줘", "과외해줘" 등
+   - 주제/내용에 대한 이해를 도와주는 요청은 모두 tutor_agent
 
 ## 라우팅 원칙
 
 1. 사용자의 **가장 최근 질문**만 분석하세요.
 2. 퀴즈 요청이면 → transfer_to_agent("quiz_agent")
 3. 자료 검색/정리 요청이면 → transfer_to_agent("search_agent")
-4. 개념 질문이면 → transfer_to_agent("qna_agent")
-5. 과외/학습 세션 요청이면 → transfer_to_agent("tutor_agent")
-6. 불분명하면 사용자에게 먼저 질문하세요.
+4. 특정 용어/개념의 정의를 묻는 짧은 질문이면 → transfer_to_agent("qna_agent")
+5. 주제에 대한 설명, 학습, 이해를 요청하면 → transfer_to_agent("tutor_agent")
+6. 불분명하면 → transfer_to_agent("tutor_agent") (기본값)
 
 ## 금지 사항
 

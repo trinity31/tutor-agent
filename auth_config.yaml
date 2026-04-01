@@ -1,0 +1,13 @@
+cookie:
+  expiry_days: 30
+  key: 855ec74c1231856395935b51e4271015
+  name: tutor_auth
+credentials:
+  usernames:
+    kyeongyeon.song@gmail.com:
+      email: kyeongyeon.song@gmail.com
+      name: kyeongyeon.song@gmail.com
+      password: $2b$12$ZpOXf/TZoOauXG3Fzw8kQ..kgGFGcETIzmcR5anazPOI9GZJv.nVq
+    test_user:
+      name: 테스트 사용자
+      password: $2b$12$We93zRrF9NGpVe6Xj4dQQul6stUzxBRl/njpu2uNYhRB67Fa.4WPu

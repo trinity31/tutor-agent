@@ -34,5 +34,9 @@ class TutorAgentState(MessagesState):
     # 질문 답변
     answer: str = ""
 
+    # 사용자 정보
+    user_id: str = ""
+    store_name: str = ""
+
     # 에러
     error: str = ""
