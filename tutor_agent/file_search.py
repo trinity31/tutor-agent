@@ -279,15 +279,25 @@ def search(
         )
 
     client = get_client()
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=(
+
+    if file_hint:
+        prompt = (
             f"다음 강좌 자료에서 관련 내용을 찾아서 핵심 개념, 주요 용어, "
             f"중요 내용을 상세히 정리해줘: {query}\n\n"
             f"중요: 반드시 요청된 특정 주차/강의 자료의 내용만 정리해주세요. "
             f"다른 주차나 다른 강의의 내용은 절대 포함하지 마세요."
             f"{file_hint}"
-        ),
+        )
+    else:
+        prompt = (
+            f"다음 강좌 자료 전체에서 관련 내용을 찾아서 핵심 개념, 주요 용어, "
+            f"중요 내용을 상세히 정리해줘: {query}\n\n"
+            f"모든 자료를 검색하여 관련된 내용을 찾아주세요."
+        )
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
         config=types.GenerateContentConfig(
             tools=[
                 types.Tool(

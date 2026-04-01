@@ -15,10 +15,12 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from tutor_agent.agents.graph import build_graph
 from tutor_agent.file_search import (
+    get_client as get_genai_client,
     get_or_create_store,
     load_manifest,
     save_manifest,
     upload_pdf,
+    GEMINI_MODEL,
 )
 
 load_dotenv()
@@ -256,8 +258,79 @@ def _render_quiz_question():
             st.rerun()
 
 
+# --- 예시 메시지 생성 ---
+
+
+@st.cache_data(ttl=3600)
+def _generate_example_messages(file_list: tuple[str, ...]) -> list[dict]:
+    """업로드된 파일 목록을 참고하여 에이전트별 예시 메시지를 LLM으로 생성합니다."""
+    if not file_list:
+        return []
+
+    sample = list(file_list[:10])
+    file_names = "\n".join(f"- {f}" for f in sample)
+
+    client = get_genai_client()
+    from google.genai import types
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"아래는 학생이 업로드한 강의 자료 파일명 목록입니다:\n{file_names}\n\n"
+            "이 자료를 기반으로 학생이 AI 과외 선생님에게 보낼 만한 예시 메시지를 3개 생성해주세요.\n"
+            "각 메시지는 서로 다른 에이전트를 활성화하도록 작성하세요:\n"
+            '1. tutor: 주제에 대한 설명/학습 요청 (예: "~에 대해 쉽게 설명해 줘")\n'
+            '2. qna: 특정 용어/개념의 짧은 질문 (예: "~가 뭐야?")\n'
+            '3. quiz: 퀴즈 요청 (예: "~에 대한 퀴즈를 내줘")\n\n'
+            "반드시 아래 JSON 형식으로만 응답하세요:\n"
+            '[{"type":"tutor","message":"..."},{"type":"qna","message":"..."},{"type":"quiz","message":"..."}]'
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
+    try:
+        return json.loads(response.text)
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+
 # --- 메인: 채팅 ---
 st.title("AI Tutor 24/7")
+
+# 온보딩: 대화가 없을 때 사용법 + 예시 버튼 표시
+if not st.session_state["messages"] and "quiz_data" not in st.session_state:
+    st.markdown(
+        """
+        안녕하세요! AI 과외 선생님입니다. 아래와 같은 기능을 제공합니다:
+
+        - **1:1 과외** — 주제에 대해 쉽게 설명하고, 질문하며 학습을 도와줍니다
+        - **Q&A** — 특정 용어나 개념에 대한 질문에 간단히 답변합니다
+        - **퀴즈** — 학습 자료 기반 퀴즈를 생성하고 풀 수 있습니다
+
+        사이드바의 **PDF 학습자료**를 바탕으로, 아래 예시를 참고하여 대화를 시작해 보세요!
+        """
+    )
+
+    manifest = load_manifest(username)
+    if manifest:
+        examples = _generate_example_messages(tuple(manifest))
+        if examples:
+            type_icons = {"tutor": "1:1 과외", "qna": "Q&A", "quiz": "퀴즈"}
+            cols = st.columns(len(examples))
+            for col, ex in zip(cols, examples):
+                with col:
+                    label = type_icons.get(ex.get("type", ""), "")
+                    if st.button(
+                        ex["message"],
+                        key=f"example_{ex.get('type', '')}",
+                        use_container_width=True,
+                        help=label,
+                    ):
+                        st.session_state["_example_input"] = ex["message"]
+                        st.rerun()
+    else:
+        st.info("왼쪽 사이드바에서 PDF 학습자료를 먼저 업로드해 주세요.")
 
 # 히스토리 표시
 for msg in st.session_state["messages"]:
@@ -272,8 +345,11 @@ if "quiz_data" in st.session_state:
     with st.chat_message("assistant"):
         _render_quiz_question()
 
-# 사용자 입력
-if user_input := st.chat_input("메시지를 입력하세요"):
+# 사용자 입력 (예시 버튼 클릭 또는 직접 입력)
+user_input = st.session_state.pop("_example_input", None) or st.chat_input(
+    "메시지를 입력하세요"
+)
+if user_input:
     st.session_state["messages"].append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -316,7 +392,9 @@ if user_input := st.chat_input("메시지를 입력하세요"):
             final_values = snapshot.values
             current_agent = final_values.get("current_agent", "")
             agent_label = agent_labels.get(current_agent, current_agent)
-            status.update(label=f"{agent_label} 에이전트의 답변입니다.", state="complete")
+            status.update(
+                label=f"{agent_label} 에이전트의 답변입니다.", state="complete"
+            )
 
         ai_content = _extract_ai_content(final_values)
         if not ai_content:
