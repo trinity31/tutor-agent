@@ -1,0 +1,101 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+@import "tailwindcss";
+
+/* --- Design System: TutorAgent --- */
+
+@theme {
+  /* Primary — Warm Teal */
+  --color-primary-50: #E6FAF5;
+  --color-primary-100: #B3F0E0;
+  --color-primary-200: #80E6CB;
+  --color-primary-300: #4DDBB6;
+  --color-primary-400: #26D1A5;
+  --color-primary-500: #1AB394;
+  --color-primary-600: #15967D;
+  --color-primary-700: #107A66;
+
+  /* Accent — Sunny Yellow */
+  --color-accent-300: #FFE066;
+  --color-accent-400: #FCC419;
+  --color-accent-500: #FAB005;
+
+  /* Success */
+  --color-success-400: #69DB7C;
+  --color-success-500: #51CF66;
+
+  /* Error — Soft Coral */
+  --color-error-400: #FF6B6B;
+  --color-error-500: #FA5252;
+
+  /* Neutrals — Warm Gray */
+  --color-warm-50: #FAFAF8;
+  --color-warm-100: #F5F5F0;
+  --color-warm-200: #E8E8E3;
+  --color-warm-300: #D4D4CE;
+  --color-warm-400: #B8B8B0;
+  --color-warm-500: #9C9C94;
+  --color-warm-600: #6E6E68;
+  --color-warm-700: #4A4A45;
+  --color-warm-800: #3D3D38;
+  --color-warm-900: #2D2D28;
+
+  /* Font */
+  --font-sans: 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+/* --- Base Styles --- */
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-warm-50);
+  color: var(--color-warm-800);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100dvh;
+  display: flex;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-warm-300);
+  border-radius: 3px;
+}
+
+/* --- Markdown Content --- */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  font-weight: 700;
+  color: var(--color-warm-900);
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+.markdown-content h1 { font-size: 1.5rem; }
+.markdown-content h2 { font-size: 1.25rem; }
+.markdown-content h3 { font-size: 1.1rem; }
+.markdown-content p { margin-bottom: 0.75em; line-height: 1.7; }
+.markdown-content ul, .markdown-content ol { padding-left: 1.5em; margin-bottom: 0.75em; }
+.markdown-content li { margin-bottom: 0.25em; line-height: 1.6; }
+.markdown-content code {
+  background: var(--color-warm-100);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+.markdown-content strong { color: var(--color-warm-900); }

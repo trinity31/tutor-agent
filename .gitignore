@@ -14,3 +14,10 @@ wheels/
 materials/**/*.pdf
 materials/**/manifest.json
 .gstack/
+
+# SQLite DB
+data/
+
+# React frontend
+web/node_modules/
+web/dist/

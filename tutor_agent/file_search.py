@@ -187,22 +187,18 @@ def save_manifest(display_names: list[str], user_id: str = "") -> list[str]:
 # 검색 (tutor_tools.py에서 호출)
 # ============================================================
 
-# manifest 캐시 (user_id → list[str])
+# manifest 캐시 (하위 호환용으로 변수 유지)
 _manifest_cache: dict[str, list[str]] = {}
 
 
 def load_manifest(user_id: str = "") -> list[str]:
     """manifest.json에서 display_name 목록을 로드합니다."""
-    if user_id not in _manifest_cache:
-        manifest_path = _get_manifest_path(user_id)
-        try:
-            with open(manifest_path) as f:
-                _manifest_cache[user_id] = json.load(f)
-            logger.info(f"manifest 로드: {len(_manifest_cache[user_id])}개 ({manifest_path})")
-        except FileNotFoundError:
-            logger.warning(f"manifest 없음: {manifest_path}")
-            _manifest_cache[user_id] = []
-    return _manifest_cache[user_id]
+    manifest_path = _get_manifest_path(user_id)
+    try:
+        with open(manifest_path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
 
 
 def find_matching_file(subject: str, user_id: str = "") -> str | None:
