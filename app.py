@@ -365,12 +365,16 @@ if user_input:
         }
 
         with st.status("잠시만 기다려 주세요...", expanded=True) as status:
+            user_store = get_or_create_store(f"tutor-agent-{username}")
             config = {
                 "configurable": {
                     "thread_id": f"{username}_{st.session_state['thread_id']}",
+                    "user_id": username,
+                    "store_name": user_store,
+                    "class_id": "",
+                    "material_name": "",
                 }
             }
-            user_store = get_or_create_store(f"tutor-agent-{username}")
 
             # 스트리밍으로 에이전트 실행
             for event in st.session_state["graph"].stream(
