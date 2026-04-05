@@ -1,0 +1,11 @@
+.venv
+.git
+.gstack
+.langgraph_api
+__pycache__
+data/
+materials/**/*.pdf
+web/node_modules
+web/dist
+*.pyc
+.env
