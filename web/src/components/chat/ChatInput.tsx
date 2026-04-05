@@ -3,10 +3,15 @@ import { useState, useRef, useEffect } from 'react';
 export default function ChatInput({
   onSend,
   disabled,
+  placeholder = '메시지를 입력하세요',
+  inputDisabled = false,
 }: {
   onSend: (text: string) => void;
   disabled: boolean;
+  placeholder?: string;
+  inputDisabled?: boolean;
 }) {
+  const isDisabled = disabled || inputDisabled;
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -16,7 +21,7 @@ export default function ChatInput({
 
   const handleSubmit = () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || isDisabled) return;
     onSend(trimmed);
     setText('');
   };
@@ -36,8 +41,8 @@ export default function ChatInput({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="메시지를 입력하세요"
-          disabled={disabled}
+          placeholder={placeholder}
+          disabled={isDisabled}
           rows={1}
           className="flex-1 resize-none rounded-xl border border-warm-200 bg-warm-50 px-4 py-3 text-[15px] text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:opacity-50 transition-all"
           style={{ maxHeight: '120px' }}
@@ -49,7 +54,7 @@ export default function ChatInput({
         />
         <button
           onClick={handleSubmit}
-          disabled={disabled || !text.trim()}
+          disabled={isDisabled || !text.trim()}
           className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white hover:bg-primary-600 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

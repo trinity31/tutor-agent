@@ -6,9 +6,10 @@
 import json
 import os
 import re
-import tempfile
+import shutil
 import uuid
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -36,6 +37,11 @@ AGENT_LABELS = {
     "qna_agent": "Q&A 답변",
     "tutor_agent": "1:1 과외",
 }
+
+
+def _store_name_for(user_id: str, class_id: str) -> str:
+    """클래스별 Gemini Store 이름을 생성합니다."""
+    return get_or_create_store(f"tutor-agent-{user_id}-{class_id}")
 
 
 def extract_ai_content(result: dict) -> str:
@@ -76,25 +82,29 @@ async def stream_chat(
     user_message: str,
     user_id: str,
     thread_id: str,
+    class_id: str,
+    material_name: str = "",
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """채팅 메시지를 처리하고 SSE 이벤트를 yield합니다.
-
-    Yields:
-        {"event": "agent_status", "data": {"agent": str, "label": str}}
-        {"event": "message", "data": {"content": str, "agent": str}}
-        {"event": "quiz", "data": {...quiz JSON...}}
-        {"event": "error", "data": {"message": str}}
-        {"event": "done", "data": {}}
-    """
-    store_name = get_or_create_store(f"tutor-agent-{user_id}")
-    config = {"configurable": {"thread_id": f"{user_id}_{thread_id}"}}
+    """채팅 메시지를 처리하고 SSE 이벤트를 yield합니다."""
+    store_name = _store_name_for(user_id, class_id)
+    config = {
+        "configurable": {
+            "thread_id": f"{user_id}_{thread_id}",
+            "user_id": user_id,
+            "class_id": class_id,
+            "store_name": store_name,
+            "material_name": material_name,
+        }
+    }
 
     try:
         for event in _graph.stream(
             {
                 "messages": [HumanMessage(content=user_message)],
                 "user_id": user_id,
+                "class_id": class_id,
                 "store_name": store_name,
+                "material_name": material_name,
             },
             config=config,
             stream_mode="updates",
@@ -119,7 +129,6 @@ async def stream_chat(
                 "data": {"message": "응답을 생성하지 못했습니다. 다시 시도해 주세요."},
             }
         else:
-            # 퀴즈 JSON 감지
             quiz_data = parse_quiz(ai_content)
             if quiz_data and quiz_data.get("questions"):
                 yield {"event": "quiz", "data": quiz_data}
@@ -139,57 +148,77 @@ async def stream_chat(
     yield {"event": "done", "data": {}}
 
 
-def get_materials(user_id: str) -> list[str]:
-    """사용자의 업로드된 자료 목록을 반환합니다."""
-    return load_manifest(user_id)
+def get_materials(user_id: str, class_id: str) -> list[str]:
+    """클래스의 자료 목록을 반환합니다."""
+    return load_manifest(user_id, class_id)
 
 
-def upload_material(user_id: str, file_path: str, display_name: str) -> dict:
-    """PDF를 업로드하고 결과를 반환합니다."""
-    store_name = get_or_create_store(f"tutor-agent-{user_id}")
-    existing = load_manifest(user_id)
+_MATERIALS_DIR = Path(__file__).parent.parent / "materials"
+
+
+def upload_material(user_id: str, file_path: str, display_name: str, class_id: str) -> dict:
+    """PDF를 클래스에 업로드합니다."""
+    store_name = _store_name_for(user_id, class_id)
+    existing = load_manifest(user_id, class_id)
 
     if display_name in existing:
         return {"status": "duplicate", "name": display_name}
 
     upload_pdf(store_name, file_path, display_name)
-    save_manifest(existing + [display_name], user_id)
+    save_manifest(existing + [display_name], user_id, class_id)
+
+    # PDF를 로컬에 보관 (뷰어용)
+    local_dir = _MATERIALS_DIR / user_id / class_id
+    local_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(file_path, local_dir / f"{display_name}.pdf")
 
     return {"status": "uploaded", "name": display_name}
 
 
-def generate_example_messages(user_id: str) -> list[dict]:
-    """업로드된 파일 기반으로 에이전트별 예시 메시지를 생성합니다."""
-    manifest = load_manifest(user_id)
+def get_material_path(user_id: str, class_id: str, display_name: str) -> Path | None:
+    """로컬에 저장된 PDF 경로를 반환합니다."""
+    path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
+    return path if path.exists() else None
+
+
+def generate_example_messages(user_id: str, class_id: str, material_names: str = "") -> list[dict]:
+    """선택된 자료 본문에서 Q&A 예시 질문 1개를 빠르게 생성합니다."""
+    manifest = load_manifest(user_id, class_id)
     if not manifest:
         return []
 
-    sample = manifest[:10]
-    file_names = "\n".join(f"- {f}" for f in sample)
-
+    store_name = _store_name_for(user_id, class_id)
     client = get_genai_client()
     from google.genai import types
+
+    # 선택된 자료가 있으면 해당 자료에서만 검색하도록 힌트 추가
+    material_hint = ""
+    if material_names:
+        names = [n.strip() for n in material_names.split("|") if n.strip()]
+        material_hint = f"\n다음 자료에서만 찾아주세요: {', '.join(names)}\n"
 
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=(
-            f"아래는 학생이 업로드한 강의 자료 파일명 목록입니다:\n{file_names}\n\n"
-            "이 자료를 기반으로 학생이 AI 과외 선생님에게 보낼 만한 예시 메시지를 3개 생성해주세요.\n"
-            "각 메시지는 서로 다른 에이전트를 활성화하도록 작성하세요:\n"
-            '1. tutor: 주제에 대한 설명/학습 요청 (예: "~에 대해 쉽게 설명해 줘")\n'
-            '2. qna: 특정 용어/개념의 짧은 질문 (예: "~가 뭐야?")\n'
-            '3. quiz: 퀴즈 요청 (예: "~에 대한 퀴즈를 내줘")\n\n'
-            "반드시 아래 JSON 형식으로만 응답하세요:\n"
-            '[{"type":"tutor","message":"..."},{"type":"qna","message":"..."},{"type":"quiz","message":"..."}]'
+            f"이 강의 자료에서 랜덤으로 하나의 핵심 용어나 개념을 골라서, "
+            f"학생이 물어볼 법한 짧은 질문 1개를 만들어주세요.{material_hint}\n"
+            f'예: "아비투스란 무엇인가요?", "문화자본의 세 가지 유형은?"\n\n'
+            f"질문만 출력하세요. 다른 설명은 불필요합니다."
         ),
         config=types.GenerateContentConfig(
-            response_mime_type="application/json",
+            tools=[
+                types.Tool(
+                    file_search=types.FileSearch(
+                        file_search_store_names=[store_name]
+                    )
+                )
+            ],
         ),
     )
-    try:
-        return json.loads(response.text)
-    except (json.JSONDecodeError, ValueError):
-        return []
+    question = (response.text or "").strip().strip('"')
+    if question:
+        return [{"type": "qna", "message": question}]
+    return []
 
 
 def new_thread_id() -> str:

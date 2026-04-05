@@ -48,6 +48,18 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   return res.json();
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '삭제에 실패했습니다.' }));
+    throw new Error(err.detail || '삭제에 실패했습니다.');
+  }
+  return res.json();
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;
@@ -56,12 +68,14 @@ export interface SSEEvent {
 export async function streamChat(
   message: string,
   threadId: string,
+  classId: string,
+  materialName: string,
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ message, thread_id: threadId }),
+    body: JSON.stringify({ message, thread_id: threadId, class_id: classId, material_name: materialName || undefined }),
   });
 
   if (!res.ok) {

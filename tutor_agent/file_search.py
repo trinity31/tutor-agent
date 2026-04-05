@@ -45,8 +45,10 @@ def get_client() -> genai.Client:
     return _client
 
 
-def _get_manifest_path(user_id: str = "") -> str:
-    """사용자별 manifest 경로를 반환합니다."""
+def _get_manifest_path(user_id: str = "", class_id: str = "") -> str:
+    """사용자/클래스별 manifest 경로를 반환합니다."""
+    if user_id and class_id:
+        return os.path.join(_MATERIALS_DIR, user_id, class_id, "manifest.json")
     if user_id:
         return os.path.join(_MATERIALS_DIR, user_id, "manifest.json")
     return os.path.join(_PROJECT_ROOT, "file_manifest.json")
@@ -157,23 +159,20 @@ def upload_pdfs(store_name: str, files: list[tuple[str, str]]):
     print(f"\n전체 {len(files)}개 PDF 업로드 및 인덱싱 완료!")
 
 
-def save_manifest(display_names: list[str], user_id: str = "") -> list[str]:
+def save_manifest(display_names: list[str], user_id: str = "", class_id: str = "") -> list[str]:
     """display_name 목록을 manifest.json에 저장합니다.
-
-    업로드 시점에 수집한 display_name 리스트를 저장합니다.
-    (Store의 document API는 원본 display_name을 보존하지 않으므로
-     업로드 시 직접 수집해야 합니다.)
 
     Args:
         display_names: 파일 display_name 리스트
-        user_id: 사용자 ID (미지정 시 프로젝트 루트에 저장)
+        user_id: 사용자 ID
+        class_id: 클래스 ID
 
     Returns:
         정렬된 display_name 리스트
     """
     display_names = sorted(display_names)
 
-    manifest_path = _get_manifest_path(user_id)
+    manifest_path = _get_manifest_path(user_id, class_id)
     os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
 
     with open(manifest_path, "w") as f:
@@ -191,9 +190,9 @@ def save_manifest(display_names: list[str], user_id: str = "") -> list[str]:
 _manifest_cache: dict[str, list[str]] = {}
 
 
-def load_manifest(user_id: str = "") -> list[str]:
+def load_manifest(user_id: str = "", class_id: str = "") -> list[str]:
     """manifest.json에서 display_name 목록을 로드합니다."""
-    manifest_path = _get_manifest_path(user_id)
+    manifest_path = _get_manifest_path(user_id, class_id)
     try:
         with open(manifest_path) as f:
             return json.load(f)
@@ -201,12 +200,12 @@ def load_manifest(user_id: str = "") -> list[str]:
         return []
 
 
-def find_matching_file(subject: str, user_id: str = "") -> str | None:
+def find_matching_file(subject: str, user_id: str = "", class_id: str = "") -> str | None:
     """LLM을 사용하여 사용자 입력과 가장 일치하는 파일 display_name을 찾습니다.
 
     예: '양택풍수론 4주차' → '양택풍수론 - 제04주차_전통건축의 이해 한옥과 문화재 풍수'
     """
-    display_names = load_manifest(user_id or DEFAULT_USER_ID)
+    display_names = load_manifest(user_id or DEFAULT_USER_ID, class_id)
     if not display_names:
         return None
 
@@ -245,6 +244,7 @@ def search(
     display_name: str = "",
     store_name: str = "",
     user_id: str = "",
+    class_id: str = "",
 ) -> str:
     """Gemini File Search로 강좌 자료를 검색합니다.
 
@@ -254,6 +254,7 @@ def search(
         display_name: 정확한 파일 display_name — LLM 매칭 건너뜀 (버튼 선택 시)
         store_name: Store 이름 (미지정 시 환경변수 사용)
         user_id: 사용자 ID (사용자별 manifest 로드용)
+        class_id: 클래스 ID (클래스별 manifest 로드용)
 
     Returns:
         검색된 자료 텍스트
@@ -263,16 +264,27 @@ def search(
         return "FILE_SEARCH_STORE_NAME이 설정되지 않았습니다. setup_store.py를 먼저 실행하세요."
 
     # display_name이 직접 주어지면 LLM 매칭 건너뜀
+    # display_name은 '|'로 구분된 복수 파일명일 수 있음
     file_hint = ""
     effective_user_id = user_id or DEFAULT_USER_ID
-    matched_file = display_name or (
-        find_matching_file(user_message, effective_user_id) if user_message else None
-    )
-    if matched_file:
+    if display_name and "|" in display_name:
+        file_names = [n.strip() for n in display_name.split("|") if n.strip()]
+        file_list = ", ".join(f'"{n}"' for n in file_names)
+        file_hint = f"\n검색 대상 파일: {file_list}\n이 파일들의 내용만 정리해주세요."
+    elif display_name:
         file_hint = (
-            f"\n검색 대상 파일: \"{matched_file}\"\n"
+            f"\n검색 대상 파일: \"{display_name}\"\n"
             "이 파일의 내용만 정리해주세요."
         )
+    else:
+        matched_file = (
+            find_matching_file(user_message, effective_user_id, class_id) if user_message else None
+        )
+        if matched_file:
+            file_hint = (
+                f"\n검색 대상 파일: \"{matched_file}\"\n"
+                "이 파일의 내용만 정리해주세요."
+            )
 
     client = get_client()
 

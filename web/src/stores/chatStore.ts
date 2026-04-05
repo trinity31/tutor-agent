@@ -33,7 +33,7 @@ interface ChatState {
   quizData: QuizData | null;
   quizIndex: number;
   quizAnswers: QuizAnswer[];
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, classId?: string, materialName?: string) => Promise<void>;
   newChat: () => Promise<void>;
   answerQuiz: (selected: string) => void;
   quitQuiz: () => void;
@@ -61,7 +61,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   quizIndex: 0,
   quizAnswers: [],
 
-  sendMessage: async (text: string) => {
+  sendMessage: async (text: string, classId?: string, materialName?: string) => {
     const { threadId } = get();
 
     // 사용자 메시지 추가
@@ -77,7 +77,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       let assistantAgent = '';
       let assistantLabel = '';
 
-      await streamChat(text, threadId, (event: SSEEvent) => {
+      await streamChat(text, threadId, classId || '', materialName || '', (event: SSEEvent) => {
         switch (event.event) {
           case 'agent_status':
             set({

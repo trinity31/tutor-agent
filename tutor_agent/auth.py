@@ -3,6 +3,7 @@
 import hashlib
 import os
 import sqlite3
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,8 +47,72 @@ def _get_db() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS classes (
+            id TEXT PRIMARY KEY,
+            user_email TEXT NOT NULL,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_email) REFERENCES users(email)
+        )
+        """
+    )
     conn.commit()
     return conn
+
+
+# --- 클래스 CRUD ---
+
+
+def create_class(user_email: str, name: str) -> dict:
+    """클래스를 생성합니다."""
+    conn = _get_db()
+    try:
+        class_id = str(uuid.uuid4())[:8]
+        conn.execute(
+            "INSERT INTO classes (id, user_email, name) VALUES (?, ?, ?)",
+            (class_id, user_email.lower(), name),
+        )
+        conn.commit()
+        return {"id": class_id, "name": name}
+    finally:
+        conn.close()
+
+
+def get_classes(user_email: str) -> list[dict]:
+    """사용자의 클래스 목록을 반환합니다."""
+    conn = _get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name, created_at FROM classes WHERE user_email = ? ORDER BY created_at",
+            (user_email.lower(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_class(class_id: str) -> dict | None:
+    """클래스를 조회합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, user_email, name FROM classes WHERE id = ?", (class_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def delete_class(class_id: str):
+    """클래스를 삭제합니다."""
+    conn = _get_db()
+    try:
+        conn.execute("DELETE FROM classes WHERE id = ?", (class_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def create_user(email: str, password: str, name: str = "") -> dict:

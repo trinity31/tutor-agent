@@ -20,9 +20,12 @@ from pydantic import BaseModel
 from ..auth import (
     authenticate_user,
     create_access_token,
+    create_class,
     create_user,
+    delete_class,
+    get_class,
+    get_classes,
     get_user,
-    migrate_from_yaml,
     verify_token,
 )
 from ..service import (
@@ -113,12 +116,89 @@ async def me(user: dict = Depends(get_current_user)):
     return {"user": user}
 
 
+# --- Classes Endpoints ---
+
+
+class CreateClassRequest(BaseModel):
+    name: str
+
+
+@app.get("/api/classes")
+async def list_classes(user: dict = Depends(get_current_user)):
+    classes = get_classes(user["email"])
+    return {"classes": classes}
+
+
+@app.post("/api/classes", status_code=201)
+async def create_class_endpoint(body: CreateClassRequest, user: dict = Depends(get_current_user)):
+    cls = create_class(user["email"], body.name)
+    return cls
+
+
+@app.delete("/api/classes/{class_id}")
+async def delete_class_endpoint(class_id: str, user: dict = Depends(get_current_user)):
+    cls = get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+    if cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    delete_class(class_id)
+    return {"status": "deleted"}
+
+
+# --- Materials Endpoints ---
+
+
+@app.get("/api/classes/{class_id}/materials")
+async def list_materials(class_id: str, user: dict = Depends(get_current_user)):
+    materials = get_materials(user["email"], class_id)
+    return {"materials": materials}
+
+
+@app.post("/api/classes/{class_id}/materials/upload")
+async def upload(
+    class_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    cls = get_class(class_id)
+    if not cls or cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
+
+    display_name = os.path.splitext(file.filename)[0]
+
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="파일 크기는 10MB 이하여야 합니다.")
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        result = upload_material(user["email"], tmp_path, display_name, class_id)
+    finally:
+        os.unlink(tmp_path)
+
+    if result["status"] == "duplicate":
+        raise HTTPException(
+            status_code=409, detail=f"이미 업로드된 파일입니다: {result['name']}"
+        )
+
+    return result
+
+
 # --- Chat Endpoints ---
 
 
 class ChatRequest(BaseModel):
     message: str
     thread_id: str
+    class_id: str
+    material_name: str = ""
 
 
 @app.post("/api/chat")
@@ -130,6 +210,8 @@ async def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
             user_message=body.message,
             user_id=user["email"],
             thread_id=body.thread_id,
+            class_id=body.class_id,
+            material_name=body.material_name,
         ):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
 
@@ -149,52 +231,12 @@ async def new_chat(user: dict = Depends(get_current_user)):
     return {"thread_id": new_thread_id()}
 
 
-# --- Materials Endpoints ---
-
-
-@app.get("/api/materials")
-async def list_materials(user: dict = Depends(get_current_user)):
-    materials = get_materials(user["email"])
-    return {"materials": materials}
-
-
-@app.post("/api/materials/upload")
-async def upload(
-    file: UploadFile = File(...),
-    user: dict = Depends(get_current_user),
-):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
-
-    display_name = os.path.splitext(file.filename)[0]
-
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail="파일 크기는 10MB 이하여야 합니다.")
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    try:
-        result = upload_material(user["email"], tmp_path, display_name)
-    finally:
-        os.unlink(tmp_path)
-
-    if result["status"] == "duplicate":
-        raise HTTPException(
-            status_code=409, detail=f"이미 업로드된 파일입니다: {result['name']}"
-        )
-
-    return result
-
-
 # --- Example Messages ---
 
 
-@app.get("/api/examples")
-async def examples(user: dict = Depends(get_current_user)):
-    return {"examples": generate_example_messages(user["email"])}
+@app.get("/api/classes/{class_id}/examples")
+async def examples(class_id: str, materials: str = "", user: dict = Depends(get_current_user)):
+    return {"examples": generate_example_messages(user["email"], class_id, materials)}
 
 
 # --- Static Files (프로덕션: React 빌드 서빙) ---
