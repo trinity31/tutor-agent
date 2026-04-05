@@ -86,7 +86,7 @@ async def stream_chat(
         {"event": "error", "data": {"message": str}}
         {"event": "done", "data": {}}
     """
-    store_name = get_or_create_store(f"tutor-{user_id}")
+    store_name = get_or_create_store(f"tutor-agent-{user_id}")
     config = {"configurable": {"thread_id": f"{user_id}_{thread_id}"}}
 
     try:
@@ -146,7 +146,7 @@ def get_materials(user_id: str) -> list[str]:
 
 def upload_material(user_id: str, file_path: str, display_name: str) -> dict:
     """PDF를 업로드하고 결과를 반환합니다."""
-    store_name = get_or_create_store(f"tutor-{user_id}")
+    store_name = get_or_create_store(f"tutor-agent-{user_id}")
     existing = load_manifest(user_id)
 
     if display_name in existing:

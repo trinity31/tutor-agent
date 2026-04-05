@@ -107,7 +107,7 @@ with st.sidebar:
     )
 
     if uploaded_files and st.button("업로드 시작"):
-        store_name = get_or_create_store(f"tutor-{username}")
+        store_name = get_or_create_store(f"tutor-agent-{username}")
         existing = load_manifest(username)
         new_names = []
 
@@ -370,7 +370,7 @@ if user_input:
                     "thread_id": f"{username}_{st.session_state['thread_id']}",
                 }
             }
-            user_store = get_or_create_store(f"tutor-{username}")
+            user_store = get_or_create_store(f"tutor-agent-{username}")
 
             # 스트리밍으로 에이전트 실행
             for event in st.session_state["graph"].stream(

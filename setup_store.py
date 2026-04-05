@@ -89,7 +89,7 @@ def main():
     args = parser.parse_args()
 
     user_id = args.user_id
-    store_display_name = f"tutor-{user_id}"
+    store_display_name = f"tutor-agent-{user_id}"
 
     # knowledge_dir 결정
     if args.knowledge_dir:
