@@ -69,14 +69,34 @@ def extract_ai_content(result: dict) -> str:
 
 def parse_quiz(text: str) -> dict | None:
     """AI 응답에서 퀴즈 JSON을 추출합니다."""
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    json_str = m.group(1) if m else text
+    # 1차: ```json ... ``` 코드블록에서 추출 (greedy로 전체 JSON 매칭)
+    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if m:
+        try:
+            data = json.loads(m.group(1))
+            if isinstance(data, dict) and "questions" in data:
+                return data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # 2차: 텍스트에서 { ... } 직접 추출
+    m2 = re.search(r"\{.*\"questions\".*\}", text, re.DOTALL)
+    if m2:
+        try:
+            data = json.loads(m2.group(0))
+            if isinstance(data, dict) and "questions" in data:
+                return data
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # 3차: 전체 텍스트를 JSON으로 시도
     try:
-        data = json.loads(json_str)
+        data = json.loads(text)
         if isinstance(data, dict) and "questions" in data:
             return data
     except (json.JSONDecodeError, ValueError):
         pass
+
     return None
 
 

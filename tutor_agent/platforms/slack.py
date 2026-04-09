@@ -298,10 +298,13 @@ if slack_app:
             )
 
             ai_content = extract_ai_content(graph_result)
+            logger.info(f"/quiz AI 응답 길이: {len(ai_content)}자")
             quiz_data = parse_quiz(ai_content)
 
             if not quiz_data or not quiz_data.get("questions"):
-                await say(text=f"'{material_name}' 퀴즈 생성에 실패했습니다.")
+                # JSON 파싱 실패 — AI가 텍스트로 응답했을 수 있음
+                logger.warning(f"/quiz parse_quiz 실패. ai_content 앞 500자: {ai_content[:500]}")
+                await say(text=f"'{material_name}' 퀴즈 JSON 파싱에 실패했습니다. 다시 시도해주세요.")
                 return
 
             questions = quiz_data["questions"]
