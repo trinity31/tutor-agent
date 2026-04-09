@@ -60,6 +60,37 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return res.json();
 }
 
+// --- Quiz Results & Completions ---
+
+export async function saveQuizResult(data: {
+  class_id: string;
+  material_name: string;
+  quiz_title?: string;
+  questions: unknown[];
+  answers: unknown[];
+  score: number;
+  total: number;
+}) {
+  return apiPost<{ id: string; score: number; total: number; wrong_count: number }>(
+    '/quiz-results',
+    data,
+  );
+}
+
+export async function scheduleQuizRetry(
+  quizId: string,
+  data: { scheduled_date: string; schedule_mode: string; review_notes?: string },
+) {
+  return apiPost<{ id: string; type: string; scheduled_date: string }>(
+    `/quiz-results/${quizId}/schedule`,
+    data,
+  );
+}
+
+export async function markComplete(data: { class_id: string; material_name: string }) {
+  return apiPost<{ id: string; type: string }>('/completions', data);
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;

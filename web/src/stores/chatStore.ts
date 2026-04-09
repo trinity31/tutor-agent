@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { streamChat, apiPost, type SSEEvent } from '../api/client';
+import { streamChat, apiPost, saveQuizResult, type SSEEvent } from '../api/client';
+import { useClassStore } from './classStore';
 
 export interface Message {
   id: string;
@@ -33,6 +34,7 @@ interface ChatState {
   quizData: QuizData | null;
   quizIndex: number;
   quizAnswers: QuizAnswer[];
+  lastQuizResultId: string | null;
   sendMessage: (text: string, classId?: string, materialName?: string) => Promise<void>;
   newChat: () => Promise<void>;
   answerQuiz: (selected: string) => void;
@@ -60,6 +62,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   quizData: null,
   quizIndex: 0,
   quizAnswers: [],
+  lastQuizResultId: null,
 
   sendMessage: async (text: string, classId?: string, materialName?: string) => {
     const { threadId } = get();
@@ -162,19 +165,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const correctAnswer = q.answer || q.correct || '';
     const isCorrect = selected === correctAnswer;
 
+    const newAnswer: QuizAnswer = {
+      question: q.question,
+      selected,
+      answer: correctAnswer,
+      correct: isCorrect,
+      explanation: q.explanation,
+    };
+    const newAnswers = [...quizAnswers, newAnswer];
+
     set({
-      quizAnswers: [
-        ...quizAnswers,
-        {
-          question: q.question,
-          selected,
-          answer: correctAnswer,
-          correct: isCorrect,
-          explanation: q.explanation,
-        },
-      ],
+      quizAnswers: newAnswers,
       quizIndex: quizIndex + 1,
     });
+
+    // 마지막 문제 → 결과 자동 저장
+    if (quizIndex + 1 >= quizData.questions.length) {
+      const score = newAnswers.filter((a) => a.correct).length;
+      const classState = useClassStore.getState();
+      saveQuizResult({
+        class_id: classState.selectedClassId || '',
+        material_name: classState.selectedMaterials.join('|') || '',
+        quiz_title: quizData.quiz_title || '',
+        questions: quizData.questions,
+        answers: newAnswers,
+        score,
+        total: newAnswers.length,
+      })
+        .then((res) => set({ lastQuizResultId: res.id }))
+        .catch(() => {});
+    }
   },
 
   quitQuiz: () => {

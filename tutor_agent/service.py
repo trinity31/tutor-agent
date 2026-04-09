@@ -4,11 +4,13 @@
 """
 
 import json
+import logging
 import os
 import re
 import shutil
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -224,3 +226,122 @@ def generate_example_messages(user_id: str, class_id: str, material_names: str =
 def new_thread_id() -> str:
     """새 스레드 ID를 생성합니다."""
     return str(uuid.uuid4())
+
+
+# --- 복습 스케줄링 ---
+
+_logger = logging.getLogger(__name__)
+KST = timezone(timedelta(hours=9))
+
+
+def parse_schedule_date(user_input: str) -> str | None:
+    """자연어 날짜를 YYYY-MM-DD로 변환합니다. 실패 시 None."""
+    # 이미 YYYY-MM-DD 형식이면 그대로 반환
+    if re.match(r"\d{4}-\d{2}-\d{2}$", user_input.strip()):
+        return user_input.strip()
+
+    client = get_genai_client()
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    from google.genai import types
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"오늘 날짜: {today}\n"
+            f'사용자 입력: "{user_input}"\n\n'
+            "위 텍스트에서 사용자가 원하는 날짜를 YYYY-MM-DD 형식으로 추출하세요.\n"
+            "날짜를 파싱할 수 없으면 date를 null로 설정하세요.\n\n"
+            '반드시 아래 JSON 형식으로만 응답: {"date": "YYYY-MM-DD"}'
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
+    try:
+        result = json.loads(response.text)
+        parsed = result.get("date")
+        if parsed and re.match(r"\d{4}-\d{2}-\d{2}$", parsed):
+            return parsed
+    except (json.JSONDecodeError, AttributeError):
+        _logger.warning(f"날짜 파싱 실패: {user_input}")
+    return None
+
+
+async def run_scheduled_quiz_generation() -> list[dict]:
+    """오늘 예정된 completion을 찾아 퀴즈를 생성하고 Slack으로 전송합니다."""
+    from .auth import (
+        get_pending_completions,
+        mark_completion_generated,
+        save_quiz_result,
+    )
+    from .platforms.slack import post_quiz_to_slack
+
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    completions = get_pending_completions(today)
+    _logger.info(f"[크론] 예약 퀴즈 대상: {len(completions)}건 (date={today})")
+
+    results = []
+    for comp in completions:
+        try:
+            wrong_questions = comp.get("wrong_questions", [])
+
+            if wrong_questions:
+                # 틀린 문제 재출제 — LLM 불필요
+                questions = wrong_questions
+                quiz_title = comp["material_name"]
+            else:
+                # 새 퀴즈 생성 — LangGraph 그래프 사용
+                store_name = _store_name_for(comp["user_email"], comp["class_id"])
+                thread_id = str(uuid.uuid4())
+                config = {"configurable": {"thread_id": f"{comp['user_email']}_{thread_id}"}}
+
+                prompt = f"{comp['material_name']}에 대한 퀴즈를 내줘"
+                graph_result = _graph.invoke(
+                    {
+                        "messages": [HumanMessage(content=prompt)],
+                        "user_id": comp["user_email"],
+                        "class_id": comp["class_id"],
+                        "store_name": store_name,
+                        "material_name": comp["material_name"],
+                    },
+                    config=config,
+                )
+
+                ai_content = extract_ai_content(graph_result)
+                quiz_data = parse_quiz(ai_content)
+                if not quiz_data or not quiz_data.get("questions"):
+                    results.append({"completion_id": comp["id"], "status": "failed", "reason": "퀴즈 생성 실패"})
+                    continue
+
+                questions = quiz_data["questions"]
+                quiz_title = quiz_data.get("quiz_title", comp["material_name"])
+
+            # DB에 퀴즈 저장
+            quiz_result = save_quiz_result(
+                user_email=comp["user_email"],
+                class_id=comp["class_id"],
+                material_name=comp["material_name"],
+                quiz_title=quiz_title,
+                questions=questions,
+                answers={},
+                score=0,
+                total=len(questions),
+                quiz_type=comp["type"],
+                source_quiz_id=comp.get("source_quiz_id"),
+                status="in_progress",
+            )
+
+            # Slack 전송
+            from .auth import get_quiz_result
+            quiz = get_quiz_result(quiz_result["id"])
+            if quiz:
+                await post_quiz_to_slack(quiz)
+
+            mark_completion_generated(comp["id"], quiz_result["id"])
+            results.append({"completion_id": comp["id"], "status": "generated", "quiz_id": quiz_result["id"]})
+
+        except Exception as e:
+            _logger.error(f"[크론] 퀴즈 생성 실패: {comp['id']} — {e}")
+            results.append({"completion_id": comp["id"], "status": "error", "reason": str(e)})
+
+    return results

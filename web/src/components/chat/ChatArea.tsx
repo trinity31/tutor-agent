@@ -18,6 +18,7 @@ export default function ChatArea() {
     quizData,
     quizIndex,
     quizAnswers,
+    lastQuizResultId,
     sendMessage,
     answerQuiz,
     quitQuiz,
@@ -93,7 +94,7 @@ export default function ChatArea() {
             )}
 
             {showQuizResult && (
-              <QuizResult answers={quizAnswers} onClose={quitQuiz} />
+              <QuizResult answers={quizAnswers} quizResultId={lastQuizResultId} onClose={quitQuiz} />
             )}
 
             {error && (

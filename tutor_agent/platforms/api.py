@@ -17,6 +17,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from starlette.requests import Request
+
 from ..auth import (
     authenticate_user,
     create_access_token,
@@ -25,16 +27,23 @@ from ..auth import (
     delete_class,
     get_class,
     get_classes,
+    get_quiz_result,
+    get_quiz_results,
     get_user,
+    save_completion,
+    save_quiz_result,
+    update_quiz_result,
     verify_token,
 )
 from ..service import (
     generate_example_messages,
     get_materials,
     new_thread_id,
+    parse_schedule_date,
     stream_chat,
     upload_material,
 )
+from .slack import slack_handler
 
 load_dotenv()
 
@@ -237,6 +246,136 @@ async def new_chat(user: dict = Depends(get_current_user)):
 @app.get("/api/classes/{class_id}/examples")
 async def examples(class_id: str, materials: str = "", user: dict = Depends(get_current_user)):
     return {"examples": generate_example_messages(user["email"], class_id, materials)}
+
+
+# --- Quiz Results Endpoints ---
+
+
+class SaveQuizResultRequest(BaseModel):
+    class_id: str
+    material_name: str
+    quiz_title: str = ""
+    questions: list[dict]
+    answers: list[dict]
+    score: int
+    total: int
+    quiz_type: str = "normal"
+    source_quiz_id: str | None = None
+
+
+@app.post("/api/quiz-results", status_code=201)
+async def save_quiz_result_endpoint(body: SaveQuizResultRequest, user: dict = Depends(get_current_user)):
+    result = save_quiz_result(
+        user_email=user["email"],
+        class_id=body.class_id,
+        material_name=body.material_name,
+        quiz_title=body.quiz_title,
+        questions=body.questions,
+        answers=body.answers,
+        score=body.score,
+        total=body.total,
+        quiz_type=body.quiz_type,
+        source_quiz_id=body.source_quiz_id,
+    )
+    return result
+
+
+@app.get("/api/quiz-results")
+async def list_quiz_results(class_id: str = "", user: dict = Depends(get_current_user)):
+    results = get_quiz_results(user["email"], class_id or None)
+    return {"results": results}
+
+
+class ScheduleQuizRequest(BaseModel):
+    scheduled_date: str  # YYYY-MM-DD 또는 자연어
+    schedule_mode: str = "wrong_only"  # wrong_only | full
+    review_notes: str = ""
+
+
+@app.post("/api/quiz-results/{quiz_id}/schedule")
+async def schedule_quiz_retry(quiz_id: str, body: ScheduleQuizRequest, user: dict = Depends(get_current_user)):
+    quiz = get_quiz_result(quiz_id)
+    if not quiz or quiz["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="퀴즈를 찾을 수 없습니다.")
+
+    parsed_date = parse_schedule_date(body.scheduled_date)
+    if not parsed_date:
+        raise HTTPException(status_code=400, detail="날짜를 인식하지 못했습니다.")
+
+    wrong_questions = quiz.get("wrong_questions") if body.schedule_mode == "wrong_only" else None
+    material_name = quiz["material_name"]
+    if body.schedule_mode == "wrong_only" and wrong_questions:
+        material_name = f"{material_name.replace(' (오답 복습)', '')} (오답 복습)"
+
+    comp = save_completion(
+        user_email=user["email"],
+        class_id=quiz["class_id"],
+        material_name=material_name,
+        completion_type="scheduled",
+        scheduled_date=parsed_date,
+        schedule_mode=body.schedule_mode,
+        source_quiz_id=quiz_id,
+        wrong_questions=wrong_questions,
+        review_notes=body.review_notes,
+    )
+    return comp
+
+
+class UpdateReviewNotesRequest(BaseModel):
+    review_notes: str
+
+
+@app.patch("/api/quiz-results/{quiz_id}/review-notes")
+async def update_review_notes(quiz_id: str, body: UpdateReviewNotesRequest, user: dict = Depends(get_current_user)):
+    quiz = get_quiz_result(quiz_id)
+    if not quiz or quiz["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="퀴즈를 찾을 수 없습니다.")
+    update_quiz_result(quiz_id, review_notes=body.review_notes)
+    return {"status": "updated"}
+
+
+# --- Completions Endpoints ---
+
+
+class MarkCompleteRequest(BaseModel):
+    class_id: str
+    material_name: str
+
+
+@app.post("/api/completions", status_code=201)
+async def mark_complete(body: MarkCompleteRequest, user: dict = Depends(get_current_user)):
+    """학습 완료를 등록합니다. 다음날 Slack 퀴즈가 자동 생성됩니다."""
+    comp = save_completion(
+        user_email=user["email"],
+        class_id=body.class_id,
+        material_name=body.material_name,
+    )
+    return comp
+
+
+# --- Slack Events ---
+
+
+if slack_handler:
+    @app.post("/slack/events")
+    async def slack_events(req: Request):
+        return await slack_handler.handle(req)
+
+
+# --- Cron: 예약 퀴즈 생성 ---
+
+CRON_SECRET = os.getenv("CRON_SECRET", "dev-cron-secret")
+
+
+@app.post("/api/generate-scheduled-quizzes")
+async def generate_scheduled_quizzes(secret: str = ""):
+    """크론 엔드포인트: 예약된 퀴즈를 생성하고 Slack으로 전송합니다."""
+    if secret != CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid cron secret")
+    from ..service import run_scheduled_quiz_generation
+
+    results = await run_scheduled_quiz_generation()
+    return {"generated": len([r for r in results if r["status"] == "generated"]), "results": results}
 
 
 # --- Static Files (프로덕션: React 빌드 서빙) ---

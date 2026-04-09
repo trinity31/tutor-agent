@@ -67,6 +67,9 @@ def search_material(subject: str, config: RunnableConfig) -> str:
 def get_study_memos(subject: str, config: RunnableConfig) -> str:
     """해당 과목의 학습 메모를 조회합니다.
 
+    과거 퀴즈 결과에서 복습 메모와 틀린 문제를 수집하여
+    다음 퀴즈 생성 시 복습 포인트로 활용합니다.
+
     Args:
         subject: 과목명과 주차 (예: '양택풍수론 4주차')
 
@@ -75,13 +78,29 @@ def get_study_memos(subject: str, config: RunnableConfig) -> str:
     """
     cfg = config.get("configurable", {})
     user_id = cfg.get("user_id", "")
-    print(f"[TOOL] get_study_memos — subject={subject}, user_id={user_id}")
+    class_id = cfg.get("class_id", "")
+    logger.info(f"[TOOL] get_study_memos — subject={subject}, user_id={user_id}")
 
-    # TODO: GCS 연동 후 실제 메모 조회 구현
+    from tutor_agent.auth import get_quiz_results
+
+    memos = []
+    try:
+        results = get_quiz_results(user_id, class_id)
+        for r in results[:5]:  # 최근 5개 퀴즈
+            if r.get("review_notes"):
+                memos.append(f"복습 메모: {r['review_notes']}")
+            for wq in r.get("wrong_questions", []):
+                q_text = wq.get("question", "")
+                correct = wq.get("correct", wq.get("answer", ""))
+                if q_text:
+                    memos.append(f"틀린 문제: {q_text} (정답: {correct})")
+    except Exception as e:
+        logger.warning(f"[TOOL] get_study_memos 오류: {e}")
+
     result = {
         "subject": subject,
-        "memos": [],
-        "count": 0,
+        "memos": memos,
+        "count": len(memos),
     }
 
     return json.dumps(result, ensure_ascii=False)

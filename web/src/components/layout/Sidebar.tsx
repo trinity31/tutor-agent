@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { markComplete } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -23,6 +24,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
+  const [completeMsg, setCompleteMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -232,6 +234,32 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                             }`}
                           >
                             {uploadMsg}
+                          </p>
+                        )}
+
+                        {/* 학습 완료 */}
+                        {selectedMaterials.length > 0 && (
+                          <button
+                            onClick={async () => {
+                              setCompleteMsg('');
+                              try {
+                                await markComplete({
+                                  class_id: cls.id,
+                                  material_name: selectedMaterials.join('|'),
+                                });
+                                setCompleteMsg('내일 Slack에서 퀴즈가 출제됩니다!');
+                              } catch {
+                                setCompleteMsg('등록에 실패했습니다.');
+                              }
+                            }}
+                            className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+                          >
+                            학습 완료
+                          </button>
+                        )}
+                        {completeMsg && (
+                          <p className={`px-3 text-xs ${completeMsg.includes('퀴즈') ? 'text-success-500' : 'text-error-500'}`}>
+                            {completeMsg}
                           </p>
                         )}
                       </div>

@@ -1,17 +1,49 @@
 import { useState } from 'react';
+import { scheduleQuizRetry } from '../../api/client';
 import type { QuizAnswer } from '../../stores/chatStore';
 
 export default function QuizResult({
   answers,
+  quizResultId,
   onClose,
 }: {
   answers: QuizAnswer[];
+  quizResultId: string | null;
   onClose: () => void;
 }) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [scheduledMsg, setScheduledMsg] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState<'wrong_only' | 'full' | null>(null);
+  const [dateInput, setDateInput] = useState('');
+
   const correct = answers.filter((a) => a.correct).length;
   const total = answers.length;
   const pct = Math.round((correct / total) * 100);
+  const wrongCount = total - correct;
+
+  const handleSchedule = async (date: string, mode: string) => {
+    if (!quizResultId || !date) return;
+    setScheduling(true);
+    try {
+      const res = await scheduleQuizRetry(quizResultId, {
+        scheduled_date: date,
+        schedule_mode: mode,
+      });
+      setScheduledMsg(`${res.scheduled_date}에 재시험이 예약되었습니다.`);
+      setShowDatePicker(null);
+    } catch {
+      setScheduledMsg('예약에 실패했습니다.');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const tomorrow = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  };
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
@@ -109,6 +141,78 @@ export default function QuizResult({
           </div>
         ))}
       </div>
+
+      {/* Scheduling */}
+      {quizResultId && !scheduledMsg && (
+        <div className="mt-6 space-y-2">
+          {wrongCount > 0 && (
+            <button
+              onClick={() => handleSchedule(tomorrow(), 'wrong_only')}
+              disabled={scheduling}
+              className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-white hover:bg-amber-600 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              내일 Slack 재시험 (틀린 {wrongCount}문제)
+            </button>
+          )}
+          {wrongCount > 0 && (
+            <button
+              onClick={() => setShowDatePicker('wrong_only')}
+              disabled={scheduling}
+              className="w-full rounded-xl border-2 border-primary-500 py-3 text-sm font-semibold text-primary-500 hover:bg-primary-50 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              날짜 지정 (틀린 문제만)
+            </button>
+          )}
+          <button
+            onClick={() => setShowDatePicker('full')}
+            disabled={scheduling}
+            className="w-full rounded-xl border-2 border-warm-300 py-3 text-sm font-semibold text-warm-600 hover:bg-warm-50 active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            날짜 지정 (전체 재시험)
+          </button>
+        </div>
+      )}
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <div className="mt-3 rounded-xl bg-white p-4 shadow-sm space-y-3">
+          <p className="text-sm font-medium text-warm-700">
+            {showDatePicker === 'wrong_only' ? '틀린 문제 재시험' : '전체 재시험'} 날짜
+          </p>
+          <input
+            type="date"
+            value={dateInput}
+            onChange={(e) => setDateInput(e.target.value)}
+            min={tomorrow()}
+            className="w-full rounded-lg border border-warm-200 px-3 py-2 text-sm"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowDatePicker(null);
+                setDateInput('');
+              }}
+              className="flex-1 rounded-lg border border-warm-200 py-2 text-sm text-warm-600"
+            >
+              취소
+            </button>
+            <button
+              onClick={() => handleSchedule(dateInput, showDatePicker)}
+              disabled={!dateInput || scheduling}
+              className="flex-1 rounded-lg bg-primary-500 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              예약
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled confirmation */}
+      {scheduledMsg && (
+        <div className="mt-4 rounded-xl bg-success-50 px-4 py-3 text-sm text-success-700">
+          {scheduledMsg}
+        </div>
+      )}
 
       {/* Close */}
       <button
