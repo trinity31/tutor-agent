@@ -179,11 +179,11 @@ async def upload(
 
     display_name = os.path.splitext(file.filename)[0]
 
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         content = await file.read()
         if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail="파일 크기는 10MB 이하여야 합니다.")
+            raise HTTPException(status_code=413, detail="파일 크기는 30MB 이하여야 합니다.")
         tmp.write(content)
         tmp_path = tmp.name
 
