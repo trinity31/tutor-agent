@@ -113,6 +113,10 @@ export async function markComplete(data: { class_id: string; material_name: stri
   return apiPost<{ id: string; type: string }>('/completions', data);
 }
 
+export async function getCompletedMaterials(classId: string) {
+  return apiGet<{ materials: string[] }>(`/classes/${classId}/completed-materials`);
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;

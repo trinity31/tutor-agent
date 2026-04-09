@@ -454,6 +454,19 @@ def get_pending_completions(target_date: str) -> list[dict]:
         conn.close()
 
 
+def get_completed_materials(user_email: str, class_id: str) -> list[str]:
+    """학습 완료된 자료명 목록을 반환합니다."""
+    conn = _get_db()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT material_name FROM completions WHERE user_email = ? AND class_id = ?",
+            (user_email.lower(), class_id),
+        ).fetchall()
+        return [r["material_name"] for r in rows]
+    finally:
+        conn.close()
+
+
 def mark_completion_generated(completion_id: str, quiz_id: str):
     """completion을 퀴즈 생성 완료로 표시합니다."""
     conn = _get_db()

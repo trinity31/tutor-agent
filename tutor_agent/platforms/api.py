@@ -28,6 +28,7 @@ from ..auth import (
     delete_study_note,
     get_class,
     get_classes,
+    get_completed_materials,
     get_quiz_result,
     get_quiz_results,
     get_study_notes,
@@ -354,6 +355,12 @@ async def mark_complete(body: MarkCompleteRequest, user: dict = Depends(get_curr
         material_name=body.material_name,
     )
     return comp
+
+
+@app.get("/api/classes/{class_id}/completed-materials")
+async def list_completed_materials(class_id: str, user: dict = Depends(get_current_user)):
+    """학습 완료된 자료명 목록을 반환합니다."""
+    return {"materials": get_completed_materials(user["email"], class_id)}
 
 
 # --- Study Notes Endpoints ---

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { markComplete, saveStudyNote, getStudyNotes, deleteStudyNote, type StudyNote } from '../../api/client';
+import {
+  markComplete,
+  getCompletedMaterials,
+  saveStudyNote,
+  getStudyNotes,
+  deleteStudyNote,
+  type StudyNote,
+} from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -24,12 +31,29 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
-  const [completeMsg, setCompleteMsg] = useState('');
-  const [noteText, setNoteText] = useState('');
-  const [showNoteForm, setShowNoteForm] = useState(false);
+
+  // 자료별 상태
+  const [completedMaterials, setCompletedMaterials] = useState<string[]>([]);
   const [notes, setNotes] = useState<StudyNote[]>([]);
+  const [noteText, setNoteText] = useState('');
+  const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadClasses();
+  }, [loadClasses]);
+
+  // 클래스 변경 시 완료 목록 로드
+  useEffect(() => {
+    if (selectedClassId) {
+      getCompletedMaterials(selectedClassId)
+        .then((res) => setCompletedMaterials(res.materials))
+        .catch(() => setCompletedMaterials([]));
+    } else {
+      setCompletedMaterials([]);
+    }
+  }, [selectedClassId]);
 
   // 선택된 자료 변경 시 노트 로드
   useEffect(() => {
@@ -40,11 +64,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     } else {
       setNotes([]);
     }
+    setShowNoteFor(null);
+    setNoteText('');
   }, [selectedClassId, selectedMaterials]);
-
-  useEffect(() => {
-    loadClasses();
-  }, [loadClasses]);
 
   const handleCreateClass = async () => {
     const name = newClassName.trim();
@@ -66,11 +88,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const handleUpload = async (classId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-
     setUploading(true);
     setUploadMsg('');
     let uploaded = 0;
-
     for (const file of Array.from(files)) {
       try {
         await uploadMaterial(classId, file);
@@ -79,12 +99,32 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
         setUploadMsg((err as Error).message);
       }
     }
-
-    if (uploaded > 0) {
-      setUploadMsg(`${uploaded}개 파일 업로드 완료!`);
-    }
+    if (uploaded > 0) setUploadMsg(`${uploaded}개 파일 업로드 완료!`);
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handleMarkComplete = async (classId: string, name: string) => {
+    try {
+      await markComplete({ class_id: classId, material_name: name });
+      setCompletedMaterials((prev) => [...prev, name]);
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveNote = async (classId: string, materialName: string) => {
+    if (!noteText.trim()) return;
+    setNoteSaving(true);
+    try {
+      const note = await saveStudyNote({
+        class_id: classId,
+        material_name: materialName,
+        content: noteText.trim(),
+      });
+      setNotes((prev) => [note, ...prev]);
+      setNoteText('');
+      setShowNoteFor(null);
+    } catch { /* ignore */ }
+    setNoteSaving(false);
   };
 
   return (
@@ -200,28 +240,112 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                       <div className="ml-5 mt-1 space-y-0.5">
                         {materials.map((name) => {
                           const isChecked = selectedMaterials.includes(name);
+                          const isCompleted = completedMaterials.includes(name);
+
                           return (
-                            <button
-                              key={name}
-                              onClick={() => toggleMaterial(name)}
-                              className={`flex w-full items-center gap-2 text-left rounded-md px-3 py-1.5 text-xs truncate transition-colors ${
-                                isChecked
-                                  ? 'bg-primary-100 text-primary-700 font-medium'
-                                  : 'text-warm-600 hover:bg-warm-50'
-                              }`}
-                              title={name}
-                            >
-                              <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                isChecked ? 'bg-primary-500 border-primary-500' : 'border-warm-300'
-                              }`}>
-                                {isChecked && (
-                                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                    <path d="M1.5 4l2 2 3-3.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
+                            <div key={name}>
+                              {/* 자료 행: 선택 + 이름 + 액션 버튼 */}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => toggleMaterial(name)}
+                                  className={`flex flex-1 items-center gap-2 text-left rounded-md px-3 py-1.5 text-xs truncate transition-colors ${
+                                    isChecked
+                                      ? 'bg-primary-100 text-primary-700 font-medium'
+                                      : 'text-warm-600 hover:bg-warm-50'
+                                  }`}
+                                  title={name}
+                                >
+                                  <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
+                                    isChecked ? 'bg-primary-500 border-primary-500' : 'border-warm-300'
+                                  }`}>
+                                    {isChecked && (
+                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                        <path d="M1.5 4l2 2 3-3.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="truncate">{name}</span>
+                                </button>
+
+                                {/* 학습 완료 버튼 */}
+                                {isChecked && !isCompleted && (
+                                  <button
+                                    onClick={() => handleMarkComplete(cls.id, name)}
+                                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+                                    title="학습 완료 등록"
+                                  >
+                                    완료
+                                  </button>
                                 )}
-                              </span>
-                              <span className="truncate">{name}</span>
-                            </button>
+                                {isCompleted && (
+                                  <span className="shrink-0 text-[10px] text-success-500 font-medium px-1.5">
+                                    완료
+                                  </span>
+                                )}
+
+                                {/* 노트 버튼 */}
+                                {isChecked && (
+                                  <button
+                                    onClick={() => setShowNoteFor(showNoteFor === name ? null : name)}
+                                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+                                    title="노트 추가"
+                                  >
+                                    메모
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* 노트 입력/목록 (선택된 자료에만) */}
+                              {isChecked && showNoteFor === name && (
+                                <div className="ml-5 mt-1 mb-1 space-y-1.5">
+                                  <div className="space-y-1.5">
+                                    <textarea
+                                      value={noteText}
+                                      onChange={(e) => setNoteText(e.target.value)}
+                                      placeholder="기억할 내용을 메모하세요"
+                                      rows={2}
+                                      className="w-full rounded-md border border-warm-200 bg-warm-50 px-2 py-1.5 text-xs text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
+                                    />
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={() => { setShowNoteFor(null); setNoteText(''); }}
+                                        className="flex-1 rounded-md border border-warm-200 py-1 text-xs text-warm-600"
+                                      >
+                                        취소
+                                      </button>
+                                      <button
+                                        onClick={() => handleSaveNote(cls.id, name)}
+                                        disabled={!noteText.trim() || noteSaving}
+                                        className="flex-1 rounded-md bg-primary-500 py-1 text-xs font-medium text-white disabled:opacity-30"
+                                      >
+                                        저장
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 저장된 노트 (선택된 자료에만) */}
+                              {isChecked && notes.length > 0 && (
+                                <div className="ml-5 mt-1 mb-1 space-y-1">
+                                  {notes.map((n) => (
+                                    <div key={n.id} className="group flex items-start gap-1.5 rounded-md bg-warm-50 px-2 py-1.5">
+                                      <p className="flex-1 text-xs text-warm-700 whitespace-pre-wrap">{n.content}</p>
+                                      <button
+                                        onClick={async () => {
+                                          await deleteStudyNote(n.id);
+                                          setNotes((prev) => prev.filter((x) => x.id !== n.id));
+                                        }}
+                                        className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-xs"
+                                        title="삭제"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
 
@@ -250,105 +374,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           >
                             {uploadMsg}
                           </p>
-                        )}
-
-                        {/* 학습 완료 (자료 1개 선택 시) */}
-                        {selectedMaterials.length === 1 && (
-                          <button
-                            onClick={async () => {
-                              setCompleteMsg('');
-                              try {
-                                await markComplete({
-                                  class_id: cls.id,
-                                  material_name: selectedMaterials[0],
-                                });
-                                setCompleteMsg('내일 Slack에서 퀴즈가 출제됩니다!');
-                              } catch {
-                                setCompleteMsg('등록에 실패했습니다.');
-                              }
-                            }}
-                            className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-amber-600 hover:bg-amber-50 transition-colors"
-                          >
-                            학습 완료
-                          </button>
-                        )}
-                        {completeMsg && (
-                          <p className={`px-3 text-xs ${completeMsg.includes('퀴즈') ? 'text-success-500' : 'text-error-500'}`}>
-                            {completeMsg}
-                          </p>
-                        )}
-
-                        {/* 학습 노트 (자료 1개 선택 시) */}
-                        {selectedMaterials.length === 1 && (
-                          <>
-                            <button
-                              onClick={() => setShowNoteForm(!showNoteForm)}
-                              className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
-                            >
-                              + 노트 추가
-                            </button>
-
-                            {showNoteForm && (
-                              <div className="px-3 space-y-1.5">
-                                <textarea
-                                  value={noteText}
-                                  onChange={(e) => setNoteText(e.target.value)}
-                                  placeholder="기억할 내용을 메모하세요"
-                                  rows={2}
-                                  className="w-full rounded-md border border-warm-200 bg-warm-50 px-2 py-1.5 text-xs text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
-                                />
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={() => { setShowNoteForm(false); setNoteText(''); }}
-                                    className="flex-1 rounded-md border border-warm-200 py-1 text-xs text-warm-600"
-                                  >
-                                    취소
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      if (!noteText.trim()) return;
-                                      setNoteSaving(true);
-                                      try {
-                                        const note = await saveStudyNote({
-                                          class_id: cls.id,
-                                          material_name: selectedMaterials[0],
-                                          content: noteText.trim(),
-                                        });
-                                        setNotes((prev) => [note, ...prev]);
-                                        setNoteText('');
-                                        setShowNoteForm(false);
-                                      } catch { /* ignore */ }
-                                      setNoteSaving(false);
-                                    }}
-                                    disabled={!noteText.trim() || noteSaving}
-                                    className="flex-1 rounded-md bg-primary-500 py-1 text-xs font-medium text-white disabled:opacity-30"
-                                  >
-                                    저장
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {notes.length > 0 && (
-                              <div className="px-3 space-y-1">
-                                {notes.map((n) => (
-                                  <div key={n.id} className="group flex items-start gap-1.5 rounded-md bg-warm-50 px-2 py-1.5">
-                                    <p className="flex-1 text-xs text-warm-700 whitespace-pre-wrap">{n.content}</p>
-                                    <button
-                                      onClick={async () => {
-                                        await deleteStudyNote(n.id);
-                                        setNotes((prev) => prev.filter((x) => x.id !== n.id));
-                                      }}
-                                      className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-xs"
-                                      title="삭제"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
                         )}
                       </div>
                     )}
