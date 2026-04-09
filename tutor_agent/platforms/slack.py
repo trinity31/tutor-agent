@@ -116,7 +116,7 @@ def build_question_blocks(quiz: dict, question: dict) -> list[dict]:
                         "answer": label,
                     }),
                 }
-                for label in ["A", "B", "C", "D"]
+                for label in ["A", "B", "C", "D"][:len(question["options"])]
             ],
         },
     ]
