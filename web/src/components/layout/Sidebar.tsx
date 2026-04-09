@@ -33,8 +33,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
   // 선택된 자료 변경 시 노트 로드
   useEffect(() => {
-    if (selectedClassId && selectedMaterials.length > 0) {
-      getStudyNotes(selectedClassId, selectedMaterials.join('|'))
+    if (selectedClassId && selectedMaterials.length === 1) {
+      getStudyNotes(selectedClassId, selectedMaterials[0])
         .then((res) => setNotes(res.notes))
         .catch(() => setNotes([]));
     } else {
@@ -252,15 +252,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           </p>
                         )}
 
-                        {/* 학습 완료 */}
-                        {selectedMaterials.length > 0 && (
+                        {/* 학습 완료 (자료 1개 선택 시) */}
+                        {selectedMaterials.length === 1 && (
                           <button
                             onClick={async () => {
                               setCompleteMsg('');
                               try {
                                 await markComplete({
                                   class_id: cls.id,
-                                  material_name: selectedMaterials.join('|'),
+                                  material_name: selectedMaterials[0],
                                 });
                                 setCompleteMsg('내일 Slack에서 퀴즈가 출제됩니다!');
                               } catch {
@@ -278,8 +278,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           </p>
                         )}
 
-                        {/* 학습 노트 */}
-                        {selectedMaterials.length > 0 && (
+                        {/* 학습 노트 (자료 1개 선택 시) */}
+                        {selectedMaterials.length === 1 && (
                           <>
                             <button
                               onClick={() => setShowNoteForm(!showNoteForm)}
@@ -311,7 +311,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                       try {
                                         const note = await saveStudyNote({
                                           class_id: cls.id,
-                                          material_name: selectedMaterials.join('|'),
+                                          material_name: selectedMaterials[0],
                                           content: noteText.trim(),
                                         });
                                         setNotes((prev) => [note, ...prev]);

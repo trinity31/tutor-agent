@@ -79,19 +79,21 @@ def get_study_memos(subject: str, config: RunnableConfig) -> str:
     cfg = config.get("configurable", {})
     user_id = cfg.get("user_id", "")
     class_id = cfg.get("class_id", "")
-    logger.info(f"[TOOL] get_study_memos — subject={subject}, user_id={user_id}")
+    material_name = cfg.get("material_name", "")
+    logger.info(f"[TOOL] get_study_memos — subject={subject}, user_id={user_id}, material={material_name}")
 
     from tutor_agent.auth import get_quiz_results, get_study_notes
 
     memos = []
     try:
-        # 사용자 노트
-        notes = get_study_notes(user_id, class_id)
+        # 해당 자료의 학습 노트
+        notes = get_study_notes(user_id, class_id, material_name or None)
         for n in notes:
             memos.append(f"학습 노트: {n['content']}")
 
-        # 퀴즈 결과에서 복습 메모 + 틀린 문제
-        results = get_quiz_results(user_id, class_id)
+        # 해당 자료의 퀴즈 결과에서 복습 메모 + 틀린 문제
+        all_results = get_quiz_results(user_id, class_id)
+        results = [r for r in all_results if not material_name or r.get("material_name") == material_name]
         for r in results[:5]:
             if r.get("review_notes"):
                 memos.append(f"복습 메모: {r['review_notes']}")
