@@ -237,6 +237,28 @@ def save_quiz_result(
     """퀴즈 결과를 저장합니다. 틀린 문제를 자동 추출합니다."""
     quiz_id = f"q-{uuid.uuid4().hex[:8]}"
 
+    # 문제 형식 정규화 (TutorAgent → Slack 호환)
+    LABELS = ["A", "B", "C", "D"]
+    for i, q in enumerate(questions):
+        if "number" not in q:
+            q["number"] = i + 1
+        # answer → correct 매핑 (Slack 핸들러용)
+        if "correct" not in q and "answer" in q:
+            answer_text = q["answer"]
+            # options에 레이블이 없으면 추가
+            if q.get("options") and not any(o.startswith("A.") for o in q["options"]):
+                labeled = [f"{LABELS[j]}. {o}" for j, o in enumerate(q["options"][:4])]
+                # 정답 레이블 찾기
+                for j, o in enumerate(q["options"][:4]):
+                    if o == answer_text:
+                        q["correct"] = LABELS[j]
+                        break
+                else:
+                    q["correct"] = "A"
+                q["options"] = labeled
+            else:
+                q["correct"] = answer_text
+
     # 틀린 문제 추출
     wrong_questions = []
     if isinstance(answers, list):
