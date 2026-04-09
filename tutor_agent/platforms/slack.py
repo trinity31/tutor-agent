@@ -283,12 +283,18 @@ if slack_app:
 
             store_name = _store_name_for(SLACK_DEFAULT_USER_EMAIL, class_id)
             thread_id = str(uuid.uuid4())
-            config = {"configurable": {"thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}"}}
+            config = {"configurable": {
+                "thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}",
+                "user_id": SLACK_DEFAULT_USER_EMAIL,
+                "class_id": class_id,
+                "store_name": store_name,
+                "material_name": material_name,
+            }}
 
             graph_result = await asyncio.to_thread(
                 _graph.invoke,
                 {
-                    "messages": [HumanMessage(content=f"{text}에 대한 퀴즈를 내줘")],
+                    "messages": [HumanMessage(content=f"{material_name}에 대한 퀴즈를 내줘")],
                     "user_id": SLACK_DEFAULT_USER_EMAIL,
                     "class_id": class_id,
                     "store_name": store_name,
@@ -357,7 +363,13 @@ if slack_app:
             store_name = _store_name_for(SLACK_DEFAULT_USER_EMAIL, class_id) if class_id else ""
 
             thread_id = str(uuid.uuid4())
-            config = {"configurable": {"thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}"}}
+            config = {"configurable": {
+                "thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}",
+                "user_id": SLACK_DEFAULT_USER_EMAIL,
+                "class_id": class_id,
+                "store_name": store_name,
+                "material_name": "",
+            }}
 
             graph_result = await asyncio.to_thread(
                 _graph.invoke,
