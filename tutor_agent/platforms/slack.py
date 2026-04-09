@@ -1,13 +1,15 @@
-"""Slack Bolt 앱: 퀴즈 전송 + 버튼 인터랙션 핸들러.
+"""Slack Bolt 앱: 슬래시 커맨드 + 퀴즈 전송 + 버튼 인터랙션 핸들러.
 
 Quiz-Bot의 slack_app.py를 TutorAgent에 맞게 포팅.
 GCS 대신 SQLite, quiz_manager 대신 LangGraph 그래프 사용.
 """
 
+import asyncio
 import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
@@ -16,8 +18,10 @@ from slack_bolt.async_app import AsyncApp
 
 from ..auth import (
     get_quiz_result,
+    get_quiz_results,
     mark_completion_generated,
     save_completion,
+    save_quiz_result,
     update_quiz_result,
 )
 
@@ -30,6 +34,9 @@ KST = timezone(timedelta(hours=9))
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
 SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID", "")
+
+# Slack 슬래시 커맨드용 기본 사용자 (Railway Variables에 설정)
+SLACK_DEFAULT_USER_EMAIL = os.getenv("SLACK_DEFAULT_USER_EMAIL", "")
 
 # Slack Bolt 앱 — 토큰이 없으면 더미 모드
 if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
@@ -45,6 +52,28 @@ else:
 
 # 스레드 상태 (인메모리 — 재시작 시 소실, 충분한 수준)
 _thread_states: dict[str, dict] = {}
+
+
+def _find_class_for_subject(user_email: str, subject: str) -> tuple[str, str] | None:
+    """사용자의 클래스 목록에서 subject와 매칭되는 클래스+자료를 찾습니다.
+
+    Returns:
+        (class_id, material_display_name) 또는 None
+    """
+    from ..auth import get_classes
+    from ..file_search import find_matching_file, load_manifest
+
+    classes = get_classes(user_email)
+    for cls in classes:
+        # 클래스 이름이 subject에 포함되어 있으면 우선 탐색
+        manifest = load_manifest(user_email, cls["id"])
+        if not manifest:
+            continue
+        matched = find_matching_file(subject, user_email, cls["id"])
+        if matched:
+            return cls["id"], matched
+
+    return None
 
 
 # ── 퀴즈 Block Kit 빌더 ─────────────────────────────────────
@@ -193,6 +222,163 @@ async def post_quiz_to_slack(quiz: dict):
 # ── 답변 핸들러 (A/B/C/D) ───────────────────────────────────
 
 if slack_app:
+
+    # ── 슬래시 커맨드 ───────────────────────────────────────
+
+    @slack_app.command("/done")
+    async def handle_done(ack, command, say):
+        """학습 완료 등록. 다음날 Slack 퀴즈 자동 생성."""
+        await ack()
+        text = command.get("text", "").strip()
+        if not text:
+            await say(text="사용법: `/done 과목명 주차` (예: `/done 음식인문학 3주차`)")
+            return
+        if not SLACK_DEFAULT_USER_EMAIL:
+            await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
+            return
+
+        # 클래스 + 자료 자동 매칭
+        match = await asyncio.to_thread(_find_class_for_subject, SLACK_DEFAULT_USER_EMAIL, text)
+        if not match:
+            await say(text=f"'{text}'와 일치하는 자료를 찾지 못했습니다. 과목명과 주차를 확인해주세요.")
+            return
+
+        class_id, material_name = match
+        save_completion(
+            user_email=SLACK_DEFAULT_USER_EMAIL,
+            class_id=class_id,
+            material_name=material_name,
+        )
+        await say(text=f"'{material_name}' 학습 완료가 등록되었습니다. 내일 오전에 퀴즈가 출제됩니다.")
+
+    @slack_app.command("/quiz")
+    async def handle_quiz(ack, command, say):
+        """즉시 퀴즈 생성 + Slack 전송."""
+        await ack()
+        text = command.get("text", "").strip()
+        if not text:
+            await say(text="사용법: `/quiz 과목명 주차` (예: `/quiz 음식인문학 3주차`)")
+            return
+        if not SLACK_DEFAULT_USER_EMAIL:
+            await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
+            return
+
+        # 클래스 + 자료 자동 매칭
+        match = await asyncio.to_thread(_find_class_for_subject, SLACK_DEFAULT_USER_EMAIL, text)
+        if not match:
+            await say(text=f"'{text}'와 일치하는 자료를 찾지 못했습니다. 과목명과 주차를 확인해주세요.")
+            return
+
+        class_id, material_name = match
+        await say(text=f"'{material_name}' 퀴즈를 생성 중입니다... 잠시만 기다려주세요.")
+
+        try:
+            from ..service import (
+                _graph,
+                _store_name_for,
+                extract_ai_content,
+                parse_quiz,
+            )
+            from langchain_core.messages import HumanMessage
+
+            store_name = _store_name_for(SLACK_DEFAULT_USER_EMAIL, class_id)
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}"}}
+
+            graph_result = await asyncio.to_thread(
+                _graph.invoke,
+                {
+                    "messages": [HumanMessage(content=f"{text}에 대한 퀴즈를 내줘")],
+                    "user_id": SLACK_DEFAULT_USER_EMAIL,
+                    "class_id": class_id,
+                    "store_name": store_name,
+                    "material_name": material_name,
+                },
+                config,
+            )
+
+            ai_content = extract_ai_content(graph_result)
+            quiz_data = parse_quiz(ai_content)
+
+            if not quiz_data or not quiz_data.get("questions"):
+                await say(text=f"'{material_name}' 퀴즈 생성에 실패했습니다.")
+                return
+
+            questions = quiz_data["questions"]
+            quiz_result = save_quiz_result(
+                user_email=SLACK_DEFAULT_USER_EMAIL,
+                class_id=class_id,
+                material_name=material_name,
+                quiz_title=quiz_data.get("quiz_title", material_name),
+                questions=questions,
+                answers={},
+                score=0,
+                total=len(questions),
+                status="in_progress",
+            )
+
+            quiz = get_quiz_result(quiz_result["id"])
+            if quiz:
+                await post_quiz_to_slack(quiz)
+
+        except Exception as e:
+            logger.error(f"/quiz 실패: {e}")
+            await say(text=f"퀴즈 생성 중 오류가 발생했습니다: {e}")
+
+    @slack_app.command("/ask")
+    async def handle_ask(ack, command, say):
+        """자료 기반 Q&A 답변."""
+        await ack()
+        text = command.get("text", "").strip()
+        if not text:
+            await say(text="사용법: `/ask 질문` (예: `/ask 음양오행의 관계는?`)")
+            return
+        if not SLACK_DEFAULT_USER_EMAIL:
+            await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
+            return
+
+        await say(text="질문을 처리 중입니다... 잠시만 기다려주세요.")
+
+        try:
+            from ..service import (
+                _graph,
+                _store_name_for,
+                extract_ai_content,
+            )
+            from ..auth import get_classes
+            from langchain_core.messages import HumanMessage
+
+            # 첫 번째 클래스를 기본으로 사용 (전체 자료 검색)
+            classes = get_classes(SLACK_DEFAULT_USER_EMAIL)
+            class_id = classes[0]["id"] if classes else ""
+            store_name = _store_name_for(SLACK_DEFAULT_USER_EMAIL, class_id) if class_id else ""
+
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": f"{SLACK_DEFAULT_USER_EMAIL}_{thread_id}"}}
+
+            graph_result = await asyncio.to_thread(
+                _graph.invoke,
+                {
+                    "messages": [HumanMessage(content=text)],
+                    "user_id": SLACK_DEFAULT_USER_EMAIL,
+                    "class_id": class_id,
+                    "store_name": store_name,
+                    "material_name": "",
+                },
+                config,
+            )
+
+            answer = extract_ai_content(graph_result)
+            if answer:
+                await say(text=answer)
+            else:
+                await say(text="답변을 생성하지 못했습니다. 질문을 다시 시도해주세요.")
+
+        except Exception as e:
+            logger.error(f"/ask 실패: {e}")
+            await say(text=f"답변 생성 중 오류가 발생했습니다: {e}")
+
+    # ── 퀴즈 답변 핸들러 (A/B/C/D) ──────────────────────────
 
     for _label in ["A", "B", "C", "D"]:
 
