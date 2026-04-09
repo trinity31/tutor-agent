@@ -34,6 +34,18 @@ export default function ChatArea() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, quizIndex, agentStatus]);
 
+  const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+  const showQuickReplies =
+    lastMsg?.role === 'assistant' &&
+    !isStreaming &&
+    !quizData &&
+    (lastMsg.agent === 'tutor_agent' || lastMsg.agent === 'qna_agent');
+
+  const quickReplies =
+    lastMsg?.agent === 'tutor_agent'
+      ? ['네', '아니오', '더 설명해 주세요', '퀴즈 내주세요']
+      : ['더 자세히 알려주세요', '퀴즈 내주세요'];
+
   const showOnboarding = messages.length === 0 && !quizData && !isStreaming;
   const showQuizResult =
     quizData && quizIndex >= quizData.questions.length && quizAnswers.length > 0;
@@ -79,6 +91,20 @@ export default function ChatArea() {
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
+
+            {showQuickReplies && (
+              <div className="flex flex-wrap gap-2 pl-11">
+                {quickReplies.map((text) => (
+                  <button
+                    key={text}
+                    onClick={() => handleSend(text)}
+                    className="rounded-full border border-primary-300 bg-white px-3 py-1.5 text-xs font-medium text-primary-600 hover:bg-primary-50 active:scale-95 transition-all"
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {isStreaming && <AgentStatus status={agentStatus} />}
 
