@@ -104,6 +104,19 @@ def _get_db() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS study_notes (
+            id TEXT PRIMARY KEY,
+            user_email TEXT NOT NULL,
+            class_id TEXT NOT NULL,
+            material_name TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_email) REFERENCES users(email)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -449,6 +462,57 @@ def mark_completion_generated(completion_id: str, quiz_id: str):
             "UPDATE completions SET quiz_generated = 1, generated_quiz_id = ? WHERE id = ?",
             (quiz_id, completion_id),
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# --- 학습 노트 CRUD ---
+
+
+def save_study_note(
+    user_email: str, class_id: str, material_name: str, content: str
+) -> dict:
+    """학습 노트를 저장합니다."""
+    note_id = str(uuid.uuid4())[:8]
+    conn = _get_db()
+    try:
+        conn.execute(
+            "INSERT INTO study_notes (id, user_email, class_id, material_name, content) VALUES (?, ?, ?, ?, ?)",
+            (note_id, user_email.lower(), class_id, material_name, content),
+        )
+        conn.commit()
+        return {"id": note_id, "material_name": material_name, "content": content}
+    finally:
+        conn.close()
+
+
+def get_study_notes(
+    user_email: str, class_id: str | None = None, material_name: str | None = None
+) -> list[dict]:
+    """학습 노트를 조회합니다."""
+    conn = _get_db()
+    try:
+        query = "SELECT * FROM study_notes WHERE user_email = ?"
+        params: list = [user_email.lower()]
+        if class_id:
+            query += " AND class_id = ?"
+            params.append(class_id)
+        if material_name:
+            query += " AND material_name = ?"
+            params.append(material_name)
+        query += " ORDER BY created_at DESC"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_study_note(note_id: str):
+    """학습 노트를 삭제합니다."""
+    conn = _get_db()
+    try:
+        conn.execute("DELETE FROM study_notes WHERE id = ?", (note_id,))
         conn.commit()
     finally:
         conn.close()

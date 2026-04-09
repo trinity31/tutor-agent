@@ -60,6 +60,28 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return res.json();
 }
 
+// --- Study Notes ---
+
+export interface StudyNote {
+  id: string;
+  material_name: string;
+  content: string;
+  created_at: string;
+}
+
+export async function saveStudyNote(data: { class_id: string; material_name: string; content: string }) {
+  return apiPost<StudyNote>('/notes', data);
+}
+
+export async function getStudyNotes(classId: string, materialName?: string) {
+  const params = materialName ? `?class_id=${classId}&material_name=${encodeURIComponent(materialName)}` : `?class_id=${classId}`;
+  return apiGet<{ notes: StudyNote[] }>(`/notes${params}`);
+}
+
+export async function deleteStudyNote(noteId: string) {
+  return apiDelete<{ status: string }>(`/notes/${noteId}`);
+}
+
 // --- Quiz Results & Completions ---
 
 export async function saveQuizResult(data: {

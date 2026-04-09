@@ -25,13 +25,16 @@ from ..auth import (
     create_class,
     create_user,
     delete_class,
+    delete_study_note,
     get_class,
     get_classes,
     get_quiz_result,
     get_quiz_results,
+    get_study_notes,
     get_user,
     save_completion,
     save_quiz_result,
+    save_study_note,
     update_quiz_result,
     verify_token,
 )
@@ -351,6 +354,31 @@ async def mark_complete(body: MarkCompleteRequest, user: dict = Depends(get_curr
         material_name=body.material_name,
     )
     return comp
+
+
+# --- Study Notes Endpoints ---
+
+
+class SaveNoteRequest(BaseModel):
+    class_id: str
+    material_name: str
+    content: str
+
+
+@app.post("/api/notes", status_code=201)
+async def save_note(body: SaveNoteRequest, user: dict = Depends(get_current_user)):
+    return save_study_note(user["email"], body.class_id, body.material_name, body.content)
+
+
+@app.get("/api/notes")
+async def list_notes(class_id: str = "", material_name: str = "", user: dict = Depends(get_current_user)):
+    return {"notes": get_study_notes(user["email"], class_id or None, material_name or None)}
+
+
+@app.delete("/api/notes/{note_id}")
+async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
+    delete_study_note(note_id)
+    return {"status": "deleted"}
 
 
 # --- Slack Events ---

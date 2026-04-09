@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { markComplete } from '../../api/client';
+import { markComplete, saveStudyNote, getStudyNotes, deleteStudyNote, type StudyNote } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -25,7 +25,22 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [completeMsg, setCompleteMsg] = useState('');
+  const [noteText, setNoteText] = useState('');
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [notes, setNotes] = useState<StudyNote[]>([]);
+  const [noteSaving, setNoteSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 선택된 자료 변경 시 노트 로드
+  useEffect(() => {
+    if (selectedClassId && selectedMaterials.length > 0) {
+      getStudyNotes(selectedClassId, selectedMaterials.join('|'))
+        .then((res) => setNotes(res.notes))
+        .catch(() => setNotes([]));
+    } else {
+      setNotes([]);
+    }
+  }, [selectedClassId, selectedMaterials]);
 
   useEffect(() => {
     loadClasses();
@@ -261,6 +276,79 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           <p className={`px-3 text-xs ${completeMsg.includes('퀴즈') ? 'text-success-500' : 'text-error-500'}`}>
                             {completeMsg}
                           </p>
+                        )}
+
+                        {/* 학습 노트 */}
+                        {selectedMaterials.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => setShowNoteForm(!showNoteForm)}
+                              className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+                            >
+                              + 노트 추가
+                            </button>
+
+                            {showNoteForm && (
+                              <div className="px-3 space-y-1.5">
+                                <textarea
+                                  value={noteText}
+                                  onChange={(e) => setNoteText(e.target.value)}
+                                  placeholder="기억할 내용을 메모하세요"
+                                  rows={2}
+                                  className="w-full rounded-md border border-warm-200 bg-warm-50 px-2 py-1.5 text-xs text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
+                                />
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={() => { setShowNoteForm(false); setNoteText(''); }}
+                                    className="flex-1 rounded-md border border-warm-200 py-1 text-xs text-warm-600"
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!noteText.trim()) return;
+                                      setNoteSaving(true);
+                                      try {
+                                        const note = await saveStudyNote({
+                                          class_id: cls.id,
+                                          material_name: selectedMaterials.join('|'),
+                                          content: noteText.trim(),
+                                        });
+                                        setNotes((prev) => [note, ...prev]);
+                                        setNoteText('');
+                                        setShowNoteForm(false);
+                                      } catch { /* ignore */ }
+                                      setNoteSaving(false);
+                                    }}
+                                    disabled={!noteText.trim() || noteSaving}
+                                    className="flex-1 rounded-md bg-primary-500 py-1 text-xs font-medium text-white disabled:opacity-30"
+                                  >
+                                    저장
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {notes.length > 0 && (
+                              <div className="px-3 space-y-1">
+                                {notes.map((n) => (
+                                  <div key={n.id} className="group flex items-start gap-1.5 rounded-md bg-warm-50 px-2 py-1.5">
+                                    <p className="flex-1 text-xs text-warm-700 whitespace-pre-wrap">{n.content}</p>
+                                    <button
+                                      onClick={async () => {
+                                        await deleteStudyNote(n.id);
+                                        setNotes((prev) => prev.filter((x) => x.id !== n.id));
+                                      }}
+                                      className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-xs"
+                                      title="삭제"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
