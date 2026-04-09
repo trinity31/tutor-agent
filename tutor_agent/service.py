@@ -155,7 +155,7 @@ def get_materials(user_id: str, class_id: str) -> list[str]:
     return load_manifest(user_id, class_id)
 
 
-_MATERIALS_DIR = Path(__file__).parent.parent / "materials"
+_MATERIALS_DIR = Path(__file__).parent.parent / "data" / "materials"
 
 
 def upload_material(user_id: str, file_path: str, display_name: str, class_id: str) -> dict:

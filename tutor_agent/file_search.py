@@ -31,7 +31,9 @@ FILE_SEARCH_STORE_NAME = os.environ.get("FILE_SEARCH_STORE_NAME", "")
 DEFAULT_USER_ID = os.environ.get("DEFAULT_USER_ID", "")
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_MATERIALS_DIR = os.path.join(_PROJECT_ROOT, "materials")
+# Volume 마운트 경로 (/app/data) 아래에 저장하여 배포 간 유지
+_DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
+_MATERIALS_DIR = os.path.join(_DATA_DIR, "materials")
 
 # --- 클라이언트 (싱글턴) ---
 _client: genai.Client | None = None
