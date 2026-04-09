@@ -325,18 +325,19 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                 </div>
                               )}
 
-                              {/* 저장된 노트 (선택된 자료에만) */}
+                              {/* 저장된 노트 — 한 줄 미리보기 */}
                               {isChecked && notes.length > 0 && (
-                                <div className="ml-5 mt-1 mb-1 space-y-1">
+                                <div className="ml-5 mt-1 mb-1 space-y-0.5">
                                   {notes.map((n) => (
-                                    <div key={n.id} className="group flex items-start gap-1.5 rounded-md bg-warm-50 px-2 py-1.5">
-                                      <p className="flex-1 text-xs text-warm-700 whitespace-pre-wrap">{n.content}</p>
+                                    <div key={n.id} className="group flex items-center gap-1 rounded-md bg-warm-50 px-2 py-1">
+                                      <span className="text-[10px] text-warm-400 shrink-0">•</span>
+                                      <p className="flex-1 text-xs text-warm-600 truncate" title={n.content}>{n.content}</p>
                                       <button
                                         onClick={async () => {
                                           await deleteStudyNote(n.id);
                                           setNotes((prev) => prev.filter((x) => x.id !== n.id));
                                         }}
-                                        className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-xs"
+                                        className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-[10px]"
                                         title="삭제"
                                       >
                                         ✕
