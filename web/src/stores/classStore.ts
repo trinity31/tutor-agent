@@ -66,9 +66,7 @@ export const useClassStore = create<ClassState>((set, get) => ({
 
   toggleMaterial: (name: string) => {
     set((s) => ({
-      selectedMaterials: s.selectedMaterials.includes(name)
-        ? s.selectedMaterials.filter((n) => n !== name)
-        : [...s.selectedMaterials, name],
+      selectedMaterials: s.selectedMaterials.includes(name) ? [] : [name],
     }));
   },
 
