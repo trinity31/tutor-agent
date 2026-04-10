@@ -17,6 +17,7 @@ from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from slack_bolt.async_app import AsyncApp
 
 from ..auth import (
+    get_classes,
     get_quiz_result,
     get_quiz_results,
     mark_completion_generated,
@@ -261,33 +262,85 @@ if slack_app:
 
     @slack_app.command("/note")
     async def handle_note(ack, command, say):
-        """자료에 학습 노트를 추가합니다."""
+        """자료에 학습 노트를 추가합니다 — 클래스 선택 드롭다운 표시."""
         await ack()
-        text = command.get("text", "").strip()
-        if not text:
-            await say(text="사용법: `/note 과목명 주차 메모 내용` (예: `/note 양택풍수론 6주차 일주문의 의미가 중요`)")
-            return
         if not SLACK_DEFAULT_USER_EMAIL:
             await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
             return
 
-        # LLM으로 자료명/메모 분리
-        parsed = await asyncio.to_thread(_parse_note_input, text)
-        if not parsed:
-            await say(text="자료명과 메모 내용을 구분하지 못했습니다. 다시 시도해주세요.")
+        classes = get_classes(SLACK_DEFAULT_USER_EMAIL)
+        if not classes:
+            await say(text="등록된 클래스가 없습니다. 웹에서 클래스를 먼저 생성해주세요.")
             return
 
-        subject, note_content = parsed
+        options = [
+            {"text": {"type": "plain_text", "text": cls["name"][:75]}, "value": cls["id"]}
+            for cls in classes[:25]
+        ]
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "노트를 추가할 *클래스*를 선택하세요:"}},
+            {
+                "type": "actions",
+                "elements": [{
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "클래스 선택"},
+                    "action_id": "note_select_class",
+                    "options": options,
+                }],
+            },
+        ]
+        await say(blocks=blocks, text="노트: 클래스를 선택하세요")
 
-        # 클래스 + 자료 매칭
-        match = await asyncio.to_thread(_find_class_for_subject, SLACK_DEFAULT_USER_EMAIL, subject)
-        if not match:
-            await say(text=f"'{subject}'와 일치하는 자료를 찾지 못했습니다.")
+    @slack_app.action("note_select_class")
+    async def handle_note_select_class(ack, body, say, action):
+        """클래스 선택 후 자료 목록 표시."""
+        await ack()
+        class_id = action["selected_option"]["value"]
+        class_name = action["selected_option"]["text"]["text"]
+
+        from ..file_search import load_manifest
+        materials = load_manifest(SLACK_DEFAULT_USER_EMAIL, class_id)
+        if not materials:
+            await say(text=f"'{class_name}' 클래스에 자료가 없습니다.")
             return
 
-        class_id, material_name = match
-        save_study_note(SLACK_DEFAULT_USER_EMAIL, class_id, material_name, note_content)
-        await say(text=f"'{material_name}'에 노트가 저장되었습니다.\n> {note_content}")
+        options = [
+            {"text": {"type": "plain_text", "text": m[:75]}, "value": json.dumps({"class_id": class_id, "material": m})}
+            for m in materials[:25]
+        ]
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{class_name}* — 노트를 추가할 *자료*를 선택하세요:"}},
+            {
+                "type": "actions",
+                "elements": [{
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "자료 선택"},
+                    "action_id": "note_select_material",
+                    "options": options,
+                }],
+            },
+        ]
+        await say(blocks=blocks, text="노트: 자료를 선택하세요")
+
+    @slack_app.action("note_select_material")
+    async def handle_note_select_material(ack, body, say, action):
+        """자료 선택 후 노트 입력 안내."""
+        await ack()
+        data = json.loads(action["selected_option"]["value"])
+        class_id = data["class_id"]
+        material_name = data["material"]
+        msg = body["message"]
+        thread_ts = msg.get("thread_ts", msg["ts"])
+
+        _thread_states[thread_ts] = {
+            "type": "note_input",
+            "class_id": class_id,
+            "material_name": material_name,
+        }
+        await say(
+            text=f"'{material_name}'에 추가할 노트를 입력해주세요:",
+            thread_ts=thread_ts,
+        )
 
     @slack_app.command("/done")
     async def handle_done(ack, command, say):
@@ -608,7 +661,7 @@ if slack_app:
 
     @slack_app.event("message")
     async def handle_message(event, say):
-        """스레드 내 날짜 입력 처리."""
+        """스레드 내 후속 입력 처리 (날짜, 노트)."""
         if event.get("bot_id") or event.get("subtype"):
             return
 
@@ -617,10 +670,32 @@ if slack_app:
             return
 
         state = _thread_states.get(thread_ts)
-        if not state or state["type"] != "reschedule":
+        if not state:
             return
 
         text = event.get("text", "").strip()
+
+        # 노트 입력 처리
+        if state["type"] == "note_input":
+            if not text:
+                return
+            save_study_note(
+                SLACK_DEFAULT_USER_EMAIL,
+                state["class_id"],
+                state["material_name"],
+                text,
+            )
+            del _thread_states[thread_ts]
+            await say(
+                text=f"'{state['material_name']}'에 노트가 저장되었습니다.\n> {text}",
+                thread_ts=thread_ts,
+            )
+            return
+
+        # 재시험 날짜 입력 처리
+        if state["type"] != "reschedule":
+            return
+
         from ..service import parse_schedule_date
 
         parsed_date = parse_schedule_date(text)
