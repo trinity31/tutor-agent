@@ -22,6 +22,7 @@ from ..auth import (
     mark_completion_generated,
     save_completion,
     save_quiz_result,
+    save_study_note,
     update_quiz_result,
 )
 
@@ -52,6 +53,39 @@ else:
 
 # 스레드 상태 (인메모리 — 재시작 시 소실, 충분한 수준)
 _thread_states: dict[str, dict] = {}
+
+
+def _parse_note_input(user_input: str) -> tuple[str, str] | None:
+    """LLM으로 사용자 입력에서 자료명과 메모 내용을 분리합니다.
+
+    예: '양택풍수론 6주차 일주문의 의미가 중요'
+      → ('양택풍수론 6주차', '일주문의 의미가 중요')
+    """
+    from ..file_search import get_client, GEMINI_MODEL
+    from google.genai import types
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f'사용자 입력: "{user_input}"\n\n'
+            "위 텍스트에서 '과목명과 주차 정보'와 '메모 내용'을 분리해주세요.\n"
+            "과목명+주차는 강의 자료를 식별하는 부분이고, 나머지가 메모입니다.\n\n"
+            '반드시 아래 JSON 형식으로만 응답: {"subject": "과목명 주차", "note": "메모 내용"}'
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
+    try:
+        result = json.loads(response.text)
+        subject = result.get("subject", "").strip()
+        note = result.get("note", "").strip()
+        if subject and note:
+            return subject, note
+    except (json.JSONDecodeError, AttributeError):
+        logger.warning(f"노트 파싱 실패: {user_input}")
+    return None
 
 
 def _find_class_for_subject(user_email: str, subject: str) -> tuple[str, str] | None:
@@ -224,6 +258,36 @@ async def post_quiz_to_slack(quiz: dict):
 if slack_app:
 
     # ── 슬래시 커맨드 ───────────────────────────────────────
+
+    @slack_app.command("/note")
+    async def handle_note(ack, command, say):
+        """자료에 학습 노트를 추가합니다."""
+        await ack()
+        text = command.get("text", "").strip()
+        if not text:
+            await say(text="사용법: `/note 과목명 주차 메모 내용` (예: `/note 양택풍수론 6주차 일주문의 의미가 중요`)")
+            return
+        if not SLACK_DEFAULT_USER_EMAIL:
+            await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
+            return
+
+        # LLM으로 자료명/메모 분리
+        parsed = await asyncio.to_thread(_parse_note_input, text)
+        if not parsed:
+            await say(text="자료명과 메모 내용을 구분하지 못했습니다. 다시 시도해주세요.")
+            return
+
+        subject, note_content = parsed
+
+        # 클래스 + 자료 매칭
+        match = await asyncio.to_thread(_find_class_for_subject, SLACK_DEFAULT_USER_EMAIL, subject)
+        if not match:
+            await say(text=f"'{subject}'와 일치하는 자료를 찾지 못했습니다.")
+            return
+
+        class_id, material_name = match
+        save_study_note(SLACK_DEFAULT_USER_EMAIL, class_id, material_name, note_content)
+        await say(text=f"'{material_name}'에 노트가 저장되었습니다.\n> {note_content}")
 
     @slack_app.command("/done")
     async def handle_done(ack, command, say):
