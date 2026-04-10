@@ -215,42 +215,27 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                 const isSelected = selectedClassId === cls.id;
 
                 return (
-                  <li key={cls.id} className="group/cls">
-                    <div className="flex items-center">
-                      <button
-                        onClick={() => handleToggle(cls.id)}
-                        className={`flex flex-1 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-colors ${
-                          isSelected
-                            ? 'bg-primary-50 text-primary-700'
-                            : 'text-warm-700 hover:bg-warm-50'
+                  <li key={cls.id}>
+                    <button
+                      onClick={() => handleToggle(cls.id)}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-colors ${
+                        isSelected
+                          ? 'bg-primary-50 text-primary-700'
+                          : 'text-warm-700 hover:bg-warm-50'
+                      }`}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 14 14"
+                        className={`shrink-0 text-warm-400 transition-transform ${
+                          isExpanded ? 'rotate-90' : ''
                         }`}
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 14 14"
-                          className={`shrink-0 text-warm-400 transition-transform ${
-                            isExpanded ? 'rotate-90' : ''
-                          }`}
-                        >
-                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                        </svg>
-                        <span className="truncate">{cls.name}</span>
-                      </button>
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`'${cls.name}' 클래스를 삭제하시겠습니까?`)) {
-                            await deleteClass(cls.id);
-                            if (expandedId === cls.id) setExpandedId(null);
-                          }
-                        }}
-                        className="shrink-0 mr-2 rounded p-1 text-warm-400 hover:text-error-500 hover:bg-error-50 transition-colors text-xs"
-                        title="클래스 삭제"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                        <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                      </svg>
+                      <span className="truncate">{cls.name}</span>
+                    </button>
 
                     {/* Expanded: materials */}
                     {isExpanded && (
@@ -406,6 +391,19 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                             {uploadMsg}
                           </p>
                         )}
+
+                        {/* 클래스 삭제 */}
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`'${cls.name}' 클래스와 모든 자료를 삭제하시겠습니까?`)) {
+                              await deleteClass(cls.id);
+                              if (expandedId === cls.id) setExpandedId(null);
+                            }
+                          }}
+                          className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-error-500 hover:bg-error-50 transition-colors"
+                        >
+                          클래스 삭제
+                        </button>
                       </div>
                     )}
                   </li>

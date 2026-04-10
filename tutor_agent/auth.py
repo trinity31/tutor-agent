@@ -165,9 +165,12 @@ def get_class(class_id: str) -> dict | None:
 
 
 def delete_class(class_id: str):
-    """클래스를 삭제합니다."""
+    """클래스와 연관 데이터를 모두 삭제합니다."""
     conn = _get_db()
     try:
+        conn.execute("DELETE FROM study_notes WHERE class_id = ?", (class_id,))
+        conn.execute("DELETE FROM quiz_results WHERE class_id = ?", (class_id,))
+        conn.execute("DELETE FROM completions WHERE class_id = ?", (class_id,))
         conn.execute("DELETE FROM classes WHERE id = ?", (class_id,))
         conn.commit()
     finally:
