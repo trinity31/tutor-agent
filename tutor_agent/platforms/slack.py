@@ -344,29 +344,77 @@ if slack_app:
 
     @slack_app.command("/done")
     async def handle_done(ack, command, say):
-        """학습 완료 등록. 다음날 Slack 퀴즈 자동 생성."""
+        """학습 완료 등록 — 클래스/자료 선택 드롭다운."""
         await ack()
-        text = command.get("text", "").strip()
-        if not text:
-            await say(text="사용법: `/done 과목명 주차` (예: `/done 음식인문학 3주차`)")
-            return
         if not SLACK_DEFAULT_USER_EMAIL:
             await say(text="SLACK_DEFAULT_USER_EMAIL 환경변수가 설정되지 않았습니다.")
             return
 
-        # 클래스 + 자료 자동 매칭
-        match = await asyncio.to_thread(_find_class_for_subject, SLACK_DEFAULT_USER_EMAIL, text)
-        if not match:
-            await say(text=f"'{text}'와 일치하는 자료를 찾지 못했습니다. 과목명과 주차를 확인해주세요.")
+        classes = get_classes(SLACK_DEFAULT_USER_EMAIL)
+        if not classes:
+            await say(text="등록된 클래스가 없습니다. 웹에서 클래스를 먼저 생성해주세요.")
             return
 
-        class_id, material_name = match
+        options = [
+            {"text": {"type": "plain_text", "text": cls["name"][:75]}, "value": cls["id"]}
+            for cls in classes[:25]
+        ]
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "학습 완료할 *클래스*를 선택하세요:"}},
+            {
+                "type": "actions",
+                "elements": [{
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "클래스 선택"},
+                    "action_id": "done_select_class",
+                    "options": options,
+                }],
+            },
+        ]
+        await say(blocks=blocks, text="학습 완료: 클래스를 선택하세요")
+
+    @slack_app.action("done_select_class")
+    async def handle_done_select_class(ack, body, say, action):
+        """클래스 선택 후 자료 목록 표시."""
+        await ack()
+        class_id = action["selected_option"]["value"]
+        class_name = action["selected_option"]["text"]["text"]
+
+        from ..file_search import load_manifest
+        materials = load_manifest(SLACK_DEFAULT_USER_EMAIL, class_id)
+        if not materials:
+            await say(text=f"'{class_name}' 클래스에 자료가 없습니다.")
+            return
+
+        options = [
+            {"text": {"type": "plain_text", "text": m[:75]}, "value": json.dumps({"class_id": class_id, "material": m})}
+            for m in materials[:25]
+        ]
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{class_name}* — 학습 완료할 *자료*를 선택하세요:"}},
+            {
+                "type": "actions",
+                "elements": [{
+                    "type": "static_select",
+                    "placeholder": {"type": "plain_text", "text": "자료 선택"},
+                    "action_id": "done_select_material",
+                    "options": options,
+                }],
+            },
+        ]
+        await say(blocks=blocks, text="학습 완료: 자료를 선택하세요")
+
+    @slack_app.action("done_select_material")
+    async def handle_done_select_material(ack, body, say, action):
+        """자료 선택 → 학습 완료 등록."""
+        await ack()
+        data = json.loads(action["selected_option"]["value"])
         save_completion(
             user_email=SLACK_DEFAULT_USER_EMAIL,
-            class_id=class_id,
-            material_name=material_name,
+            class_id=data["class_id"],
+            material_name=data["material"],
         )
-        await say(text=f"'{material_name}' 학습 완료가 등록되었습니다. 내일 오전에 퀴즈가 출제됩니다.")
+        await say(text=f"'{data['material']}' 학습 완료가 등록되었습니다. 내일 오전에 퀴즈가 출제됩니다.")
 
     @slack_app.command("/quiz")
     async def handle_quiz(ack, command, say):
