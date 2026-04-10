@@ -238,13 +238,14 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         <span className="truncate">{cls.name}</span>
                       </button>
                       <button
-                        onClick={async () => {
-                          if (confirm(`'${cls.name}' 클래스를 삭제하시겠습니까?`)) {
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`'${cls.name}' 클래스를 삭제하시겠습니까?`)) {
                             await deleteClass(cls.id);
                             if (expandedId === cls.id) setExpandedId(null);
                           }
                         }}
-                        className="shrink-0 mr-2 text-warm-400 opacity-0 group-hover/cls:opacity-100 hover:text-error-500 transition-all text-xs"
+                        className="shrink-0 mr-2 rounded p-1 text-warm-400 hover:text-error-500 hover:bg-error-50 transition-colors text-xs"
                         title="클래스 삭제"
                       >
                         ✕
