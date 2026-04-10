@@ -40,6 +40,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const [confirmDeleteClassId, setConfirmDeleteClassId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -393,17 +394,34 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         )}
 
                         {/* 클래스 삭제 */}
-                        <button
-                          onClick={async () => {
-                            if (window.confirm(`'${cls.name}' 클래스와 모든 자료를 삭제하시겠습니까?`)) {
-                              await deleteClass(cls.id);
-                              if (expandedId === cls.id) setExpandedId(null);
-                            }
-                          }}
-                          className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-error-500 hover:bg-error-50 transition-colors"
-                        >
-                          클래스 삭제
-                        </button>
+                        {confirmDeleteClassId === cls.id ? (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5">
+                            <span className="text-xs text-error-500">정말 삭제?</span>
+                            <button
+                              onClick={async () => {
+                                await deleteClass(cls.id);
+                                setConfirmDeleteClassId(null);
+                                if (expandedId === cls.id) setExpandedId(null);
+                              }}
+                              className="rounded-md bg-error-500 px-2 py-0.5 text-xs font-medium text-white"
+                            >
+                              삭제
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteClassId(null)}
+                              className="rounded-md border border-warm-200 px-2 py-0.5 text-xs text-warm-600"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteClassId(cls.id)}
+                            className="flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-error-500 hover:bg-error-50 transition-colors"
+                          >
+                            클래스 삭제
+                          </button>
+                        )}
                       </div>
                     )}
                   </li>
