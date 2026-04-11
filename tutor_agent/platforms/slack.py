@@ -55,6 +55,30 @@ else:
 # 스레드 상태 (인메모리 — 재시작 시 소실, 충분한 수준)
 _thread_states: dict[str, dict] = {}
 
+# 드롭다운 자료 매핑 (Slack value 151자 제한 대응)
+# key: "{class_id}:{index}" → value: material_name
+_material_map: dict[str, str] = {}
+
+
+def _build_material_options(class_id: str, materials: list[str]) -> list[dict]:
+    """자료 목록을 Slack 드롭다운 옵션으로 변환합니다. value는 짧은 키로."""
+    options = []
+    for i, m in enumerate(materials[:25]):
+        key = f"{class_id}:{i}"
+        _material_map[key] = m
+        options.append({
+            "text": {"type": "plain_text", "text": m[:75]},
+            "value": key,
+        })
+    return options
+
+
+def _resolve_material(value: str) -> tuple[str, str]:
+    """드롭다운 value에서 (class_id, material_name)을 반환합니다."""
+    class_id = value.split(":")[0]
+    material_name = _material_map.get(value, "")
+    return class_id, material_name
+
 
 def _parse_note_input(user_input: str) -> tuple[str, str] | None:
     """LLM으로 사용자 입력에서 자료명과 메모 내용을 분리합니다.
@@ -304,10 +328,7 @@ if slack_app:
             await say(text=f"'{class_name}' 클래스에 자료가 없습니다.")
             return
 
-        options = [
-            {"text": {"type": "plain_text", "text": m[:75]}, "value": json.dumps({"class_id": class_id, "material": m})}
-            for m in materials[:25]
-        ]
+        options = _build_material_options(class_id, materials)
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": f"*{class_name}* — 노트를 추가할 *자료*를 선택하세요:"}},
             {
@@ -326,9 +347,7 @@ if slack_app:
     async def handle_note_select_material(ack, body, say, action):
         """자료 선택 후 노트 입력 안내."""
         await ack()
-        data = json.loads(action["selected_option"]["value"])
-        class_id = data["class_id"]
-        material_name = data["material"]
+        class_id, material_name = _resolve_material(action["selected_option"]["value"])
         msg = body["message"]
         thread_ts = msg.get("thread_ts", msg["ts"])
 
@@ -386,10 +405,7 @@ if slack_app:
             await say(text=f"'{class_name}' 클래스에 자료가 없습니다.")
             return
 
-        options = [
-            {"text": {"type": "plain_text", "text": m[:75]}, "value": json.dumps({"class_id": class_id, "material": m})}
-            for m in materials[:25]
-        ]
+        options = _build_material_options(class_id, materials)
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": f"*{class_name}* — 학습 완료할 *자료*를 선택하세요:"}},
             {
@@ -408,13 +424,13 @@ if slack_app:
     async def handle_done_select_material(ack, body, say, action):
         """자료 선택 → 학습 완료 등록."""
         await ack()
-        data = json.loads(action["selected_option"]["value"])
+        class_id, material_name = _resolve_material(action["selected_option"]["value"])
         save_completion(
             user_email=SLACK_DEFAULT_USER_EMAIL,
-            class_id=data["class_id"],
-            material_name=data["material"],
+            class_id=class_id,
+            material_name=material_name,
         )
-        await say(text=f"'{data['material']}' 학습 완료가 등록되었습니다. 내일 오전에 퀴즈가 출제됩니다.")
+        await say(text=f"'{material_name}' 학습 완료가 등록되었습니다. 내일 오전에 퀴즈가 출제됩니다.")
 
     @slack_app.command("/quiz")
     async def handle_quiz(ack, command, say):
@@ -460,10 +476,7 @@ if slack_app:
             await say(text=f"'{class_name}' 클래스에 자료가 없습니다.")
             return
 
-        options = [
-            {"text": {"type": "plain_text", "text": m[:75]}, "value": json.dumps({"class_id": class_id, "material": m})}
-            for m in materials[:25]
-        ]
+        options = _build_material_options(class_id, materials)
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": f"*{class_name}* — 퀴즈를 생성할 *자료*를 선택하세요:"}},
             {
@@ -482,9 +495,7 @@ if slack_app:
     async def handle_quiz_select_material(ack, body, say, action):
         """자료 선택 → 퀴즈 생성 + Slack 전송."""
         await ack()
-        data = json.loads(action["selected_option"]["value"])
-        class_id = data["class_id"]
-        material_name = data["material"]
+        class_id, material_name = _resolve_material(action["selected_option"]["value"])
 
         await say(text=f"'{material_name}' 퀴즈를 생성 중입니다... 잠시만 기다려주세요.")
 
