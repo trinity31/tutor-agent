@@ -42,6 +42,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [noteSaving, setNoteSaving] = useState(false);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [confirmDeleteClassId, setConfirmDeleteClassId] = useState<string | null>(null);
+  const [completingMaterial, setCompletingMaterial] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -109,10 +110,12 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   };
 
   const handleMarkComplete = async (classId: string, name: string) => {
+    setCompletingMaterial(name);
     try {
       await markComplete({ class_id: classId, material_name: name });
       setCompletedMaterials((prev) => [...prev, name]);
     } catch { /* ignore */ }
+    setCompletingMaterial(null);
   };
 
   const handleSaveNote = async (classId: string, materialName: string) => {
@@ -283,10 +286,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                 {isChecked && !isCompleted && (
                                   <button
                                     onClick={() => handleMarkComplete(cls.id, name)}
-                                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-600 hover:bg-amber-50 transition-colors"
+                                    disabled={completingMaterial === name}
+                                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                                      completingMaterial === name
+                                        ? 'text-amber-400 cursor-wait'
+                                        : 'text-amber-600 hover:bg-amber-50'
+                                    }`}
                                     title="학습 완료 등록"
                                   >
-                                    완료
+                                    {completingMaterial === name ? '처리 중...' : '완료'}
                                   </button>
                                 )}
                                 {isCompleted && (
