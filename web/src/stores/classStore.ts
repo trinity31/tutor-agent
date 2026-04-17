@@ -13,6 +13,7 @@ interface ClassState {
   selectedMaterials: string[];
   viewingMaterial: string | null;
   materials: string[];
+  indexingMaterials: Set<string>;
   loading: boolean;
   loadClasses: () => Promise<void>;
   createClass: (name: string) => Promise<ClassInfo>;
@@ -25,6 +26,7 @@ interface ClassState {
   clearSelection: () => void;
   loadMaterials: (classId: string) => Promise<void>;
   uploadMaterial: (classId: string, file: File) => Promise<void>;
+  pollIndexingStatus: (classId: string) => void;
 }
 
 export const useClassStore = create<ClassState>((set, get) => ({
@@ -33,6 +35,7 @@ export const useClassStore = create<ClassState>((set, get) => ({
   selectedMaterials: [],
   viewingMaterial: null,
   materials: [],
+  indexingMaterials: new Set(),
   loading: false,
 
   loadClasses: async () => {
@@ -98,7 +101,34 @@ export const useClassStore = create<ClassState>((set, get) => ({
   },
 
   uploadMaterial: async (classId: string, file: File) => {
-    await apiUpload(`/classes/${classId}/materials/upload`, file);
+    const res = await apiUpload<{ status: string; name: string }>(
+      `/classes/${classId}/materials/upload`,
+      file,
+    );
     await get().loadMaterials(classId);
+    if (res.status === 'indexing') {
+      set((s) => ({ indexingMaterials: new Set([...s.indexingMaterials, res.name]) }));
+      get().pollIndexingStatus(classId);
+    }
+  },
+
+  pollIndexingStatus: (classId: string) => {
+    const poll = async () => {
+      try {
+        const res = await apiGet<{ statuses: Record<string, string> }>(
+          `/classes/${classId}/materials/status`,
+        );
+        const stillIndexing = Object.entries(res.statuses)
+          .filter(([, s]) => s === 'indexing')
+          .map(([name]) => name);
+        set({ indexingMaterials: new Set(stillIndexing) });
+        if (stillIndexing.length > 0) {
+          setTimeout(poll, 3000);
+        }
+      } catch {
+        // 폴링 실패 시 조용히 중단
+      }
+    };
+    setTimeout(poll, 3000);
   },
 }));

@@ -91,16 +91,41 @@ def delete_store(store_name: str):
 
 
 def upload_pdf(store_name: str, file_path: str, display_name: str):
-    """PDF 파일을 File Search Store에 업로드하고 인덱싱합니다.
+    """PDF 파일을 File Search Store에 업로드하고 인덱싱합니다 (동기, 완료까지 대기).
 
-    Args:
-        store_name: File Search Store 이름
-        file_path: PDF 파일 절대경로
-        display_name: Store 내 표시 이름 (과목-주차 식별용)
+    CLI/배치 용도. 웹 API에서는 upload_pdf_start + wait_for_indexing을 사용하세요.
     """
+    op = upload_pdf_start(store_name, file_path, display_name)
+    wait_for_indexing(op)
+    logger.info(f"업로드 완료: {display_name}")
+
+
+# --- 인덱싱 상태 추적 ---
+# key: "{store_name}:{display_name}", value: "indexing" | "ready" | "error"
+_indexing_status: dict[str, str] = {}
+
+
+def _status_key(store_name: str, display_name: str) -> str:
+    return f"{store_name}:{display_name}"
+
+
+def get_indexing_status(store_name: str, display_name: str) -> str:
+    """자료의 인덱싱 상태를 반환합니다. 추적 중이 아니면 "ready"."""
+    return _indexing_status.get(_status_key(store_name, display_name), "ready")
+
+
+def set_indexing_status(store_name: str, display_name: str, status: str):
+    key = _status_key(store_name, display_name)
+    if status == "ready":
+        _indexing_status.pop(key, None)
+    else:
+        _indexing_status[key] = status
+
+
+def upload_pdf_start(store_name: str, file_path: str, display_name: str):
+    """PDF를 업로드하고 인덱싱을 시작합니다. Operation 객체를 반환합니다 (대기 없음)."""
     client = get_client()
 
-    # 한글 경로 대응: ASCII 이름으로 임시 복사
     with tempfile.TemporaryDirectory() as tmpdir:
         safe_name = "upload.pdf"
         tmp_path = os.path.join(tmpdir, safe_name)
@@ -115,12 +140,16 @@ def upload_pdf(store_name: str, file_path: str, display_name: str):
             file_name=uploaded.name,
         )
 
-        # 인덱싱 완료 대기
-        while not op.done:
-            time.sleep(2)
-            op = client.operations.get(op)
+    set_indexing_status(store_name, display_name, "indexing")
+    return op
 
-    logger.info(f"업로드 완료: {display_name}")
+
+def wait_for_indexing(op):
+    """인덱싱 완료까지 동기 대기합니다."""
+    client = get_client()
+    while not op.done:
+        time.sleep(2)
+        op = client.operations.get(op)
 
 
 def upload_pdfs(store_name: str, files: list[tuple[str, str]]):

@@ -19,6 +19,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     selectedClassId,
     selectedMaterials,
     materials,
+    indexingMaterials,
     loadClasses,
     createClass,
     deleteClass,
@@ -244,30 +245,38 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         {materials.map((name) => {
                           const isChecked = selectedMaterials.includes(name);
                           const isCompleted = completedMaterials.includes(name);
+                          const isIndexing = indexingMaterials.has(name);
 
                           return (
                             <div key={name}>
                               {/* 자료 행: 선택 + 이름 + 액션 버튼 */}
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => toggleMaterial(name)}
+                                  onClick={() => !isIndexing && toggleMaterial(name)}
                                   className={`flex flex-1 items-center gap-2 text-left rounded-md px-3 py-1.5 text-xs truncate transition-colors ${
-                                    isChecked
-                                      ? 'bg-primary-100 text-primary-700 font-medium'
-                                      : 'text-warm-600 hover:bg-warm-50'
+                                    isIndexing
+                                      ? 'text-warm-400 cursor-wait'
+                                      : isChecked
+                                        ? 'bg-primary-100 text-primary-700 font-medium'
+                                        : 'text-warm-600 hover:bg-warm-50'
                                   }`}
-                                  title={name}
+                                  title={isIndexing ? '인덱싱 중...' : name}
                                 >
                                   <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                    isChecked ? 'bg-primary-500 border-primary-500' : 'border-warm-300'
+                                    isChecked && !isIndexing ? 'bg-primary-500 border-primary-500' : 'border-warm-300'
                                   }`}>
-                                    {isChecked && (
+                                    {isChecked && !isIndexing && (
                                       <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                                         <path d="M1.5 4l2 2 3-3.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                                       </svg>
                                     )}
                                   </span>
                                   <span className="truncate">{name}</span>
+                                  {isIndexing && (
+                                    <span className="ml-auto shrink-0 text-[10px] text-amber-500 animate-pulse">
+                                      인덱싱 중
+                                    </span>
+                                  )}
                                 </button>
 
                                 {/* 학습 완료 버튼 */}

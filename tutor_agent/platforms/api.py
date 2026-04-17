@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -40,7 +40,9 @@ from ..auth import (
     verify_token,
 )
 from ..service import (
+    finish_indexing,
     generate_example_messages,
+    get_material_indexing_status,
     get_materials,
     new_thread_id,
     parse_schedule_date,
@@ -171,6 +173,7 @@ async def list_materials(class_id: str, user: dict = Depends(get_current_user)):
 @app.post("/api/classes/{class_id}/materials/upload")
 async def upload(
     class_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
 ):
@@ -201,7 +204,30 @@ async def upload(
             status_code=409, detail=f"이미 업로드된 파일입니다: {result['name']}"
         )
 
+    # 인덱싱을 백그라운드에서 완료
+    background_tasks.add_task(
+        finish_indexing, result.pop("_op"), result.pop("_store_name"), display_name
+    )
+
     return result
+
+
+@app.get("/api/classes/{class_id}/materials/status")
+async def materials_status(class_id: str, user: dict = Depends(get_current_user)):
+    """각 자료의 인덱싱 상태를 반환합니다."""
+    cls = get_class(class_id)
+    if not cls or cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+
+    from ..service import get_materials as _get_materials
+
+    names = _get_materials(user["email"], class_id)
+    return {
+        "statuses": {
+            name: get_material_indexing_status(user["email"], class_id, name)
+            for name in names
+        }
+    }
 
 
 # --- Chat Endpoints ---

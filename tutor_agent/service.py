@@ -21,9 +21,13 @@ from .agents.graph import build_graph
 from .file_search import (
     get_client as get_genai_client,
     get_or_create_store,
+    get_indexing_status,
     load_manifest,
     save_manifest,
+    set_indexing_status,
     upload_pdf,
+    upload_pdf_start,
+    wait_for_indexing,
     GEMINI_MODEL,
 )
 
@@ -179,14 +183,14 @@ _MATERIALS_DIR = Path(__file__).parent.parent / "data" / "materials"
 
 
 def upload_material(user_id: str, file_path: str, display_name: str, class_id: str) -> dict:
-    """PDF를 클래스에 업로드합니다."""
+    """PDF를 클래스에 업로드합니다. 인덱싱은 시작만 하고 즉시 반환합니다."""
     store_name = _store_name_for(user_id, class_id)
     existing = load_manifest(user_id, class_id)
 
     if display_name in existing:
         return {"status": "duplicate", "name": display_name}
 
-    upload_pdf(store_name, file_path, display_name)
+    op = upload_pdf_start(store_name, file_path, display_name)
     save_manifest(existing + [display_name], user_id, class_id)
 
     # PDF를 로컬에 보관 (뷰어용)
@@ -194,7 +198,27 @@ def upload_material(user_id: str, file_path: str, display_name: str, class_id: s
     local_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(file_path, local_dir / f"{display_name}.pdf")
 
-    return {"status": "uploaded", "name": display_name}
+    return {"status": "indexing", "name": display_name, "_op": op, "_store_name": store_name}
+
+
+logger = logging.getLogger(__name__)
+
+
+def finish_indexing(op, store_name: str, display_name: str):
+    """백그라운드에서 인덱싱 완료를 대기하고 상태를 업데이트합니다."""
+    try:
+        wait_for_indexing(op)
+        set_indexing_status(store_name, display_name, "ready")
+        logger.info(f"인덱싱 완료: {display_name}")
+    except Exception:
+        set_indexing_status(store_name, display_name, "error")
+        logger.exception(f"인덱싱 실패: {display_name}")
+
+
+def get_material_indexing_status(user_id: str, class_id: str, display_name: str) -> str:
+    """자료의 인덱싱 상태를 반환합니다."""
+    store_name = _store_name_for(user_id, class_id)
+    return get_indexing_status(store_name, display_name)
 
 
 def get_material_path(user_id: str, class_id: str, display_name: str) -> Path | None:
@@ -250,7 +274,6 @@ def new_thread_id() -> str:
 
 # --- 복습 스케줄링 ---
 
-_logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
 
 
@@ -283,7 +306,7 @@ def parse_schedule_date(user_input: str) -> str | None:
         if parsed and re.match(r"\d{4}-\d{2}-\d{2}$", parsed):
             return parsed
     except (json.JSONDecodeError, AttributeError):
-        _logger.warning(f"날짜 파싱 실패: {user_input}")
+        logger.warning(f"날짜 파싱 실패: {user_input}")
     return None
 
 
@@ -298,7 +321,7 @@ async def run_scheduled_quiz_generation() -> list[dict]:
 
     today = datetime.now(KST).strftime("%Y-%m-%d")
     completions = get_pending_completions(today)
-    _logger.info(f"[크론] 예약 퀴즈 대상: {len(completions)}건 (date={today})")
+    logger.info(f"[크론] 예약 퀴즈 대상: {len(completions)}건 (date={today})")
 
     results = []
     for comp in completions:
@@ -367,7 +390,7 @@ async def run_scheduled_quiz_generation() -> list[dict]:
             results.append({"completion_id": comp["id"], "status": "generated", "quiz_id": quiz_result["id"]})
 
         except Exception as e:
-            _logger.error(f"[크론] 퀴즈 생성 실패: {comp['id']} — {e}")
+            logger.error(f"[크론] 퀴즈 생성 실패: {comp['id']} — {e}")
             results.append({"completion_id": comp["id"], "status": "error", "reason": str(e)})
 
     return results
