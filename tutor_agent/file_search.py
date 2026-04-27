@@ -152,6 +152,71 @@ def wait_for_indexing(op):
         op = client.operations.get(op)
 
 
+# ============================================================
+# 자료 마크다운 인덱스 생성 (PDF → 학습용 요약)
+# ============================================================
+
+_INDEX_PROMPT = """첨부된 PDF 강의자료를 학생이 빠르게 훑어볼 수 있는 한국어 마크다운 인덱스로 정리해줘.
+
+규칙:
+1. 헤딩(##, ###)으로 자료의 논리 구조를 그대로 따라간다.
+2. 핵심 용어, 인명, 연도, 한자 원어는 보존한다 (예: 주역(周易), 왕필(王弼, 226-249)).
+3. 정의·분류·대비 관계는 불릿(-)과 들여쓰기로 표현한다.
+4. 본문을 그대로 옮기지 말고 학습 포인트 중심으로 압축한다.
+5. 도식·그림은 "[그림: 설명]" 형식으로만 언급한다.
+6. JSON, 코드블록, 인사말 없이 마크다운 본문만 출력한다.
+7. 첫 줄은 "# {자료 제목}" 형식의 H1으로 시작한다.
+"""
+
+
+def generate_material_index(file_path: str, display_name: str) -> str:
+    """PDF 파일을 Gemini에 직접 입력해 학습용 마크다운 인덱스를 생성합니다.
+
+    Args:
+        file_path: 로컬 PDF 경로
+        display_name: 자료 표시 이름 (제목 힌트로 사용)
+
+    Returns:
+        마크다운 텍스트
+    """
+    client = get_client()
+    with open(file_path, "rb") as f:
+        pdf_bytes = f.read()
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[
+            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+            f"자료 제목: {display_name}\n\n{_INDEX_PROMPT}",
+        ],
+    )
+    return (response.text or "").strip()
+
+
+def get_index_path(user_id: str, class_id: str, display_name: str) -> str:
+    """자료 인덱스 마크다운 파일 경로를 반환합니다."""
+    return os.path.join(_MATERIALS_DIR, user_id, class_id, f"{display_name}.md")
+
+
+def save_material_index(user_id: str, class_id: str, display_name: str, content: str):
+    """마크다운 인덱스를 파일로 저장합니다."""
+    path = get_index_path(user_id, class_id, display_name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    logger.info(f"인덱스 저장: {path} ({len(content)}자)")
+
+
+def load_material_index(user_id: str, class_id: str, display_name: str) -> str | None:
+    """저장된 마크다운 인덱스를 로드합니다. 없으면 None."""
+    path = get_index_path(user_id, class_id, display_name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
 def upload_pdfs(store_name: str, files: list[tuple[str, str]]):
     """여러 PDF 파일을 일괄 업로드합니다.
 

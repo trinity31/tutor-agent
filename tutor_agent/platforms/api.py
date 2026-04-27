@@ -42,10 +42,12 @@ from ..auth import (
 from ..service import (
     finish_indexing,
     generate_example_messages,
+    get_material_index,
     get_material_indexing_status,
     get_materials,
     new_thread_id,
     parse_schedule_date,
+    regenerate_material_index,
     stream_chat,
     upload_material,
 )
@@ -204,9 +206,14 @@ async def upload(
             status_code=409, detail=f"이미 업로드된 파일입니다: {result['name']}"
         )
 
-    # 인덱싱을 백그라운드에서 완료
+    # 인덱싱 + 마크다운 인덱스 생성을 백그라운드에서 완료
     background_tasks.add_task(
-        finish_indexing, result.pop("_op"), result.pop("_store_name"), display_name
+        finish_indexing,
+        result.pop("_op"),
+        result.pop("_store_name"),
+        display_name,
+        user["email"],
+        class_id,
     )
 
     return result
@@ -228,6 +235,40 @@ async def materials_status(class_id: str, user: dict = Depends(get_current_user)
             for name in names
         }
     }
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/index")
+async def material_index(
+    class_id: str,
+    material_name: str,
+    user: dict = Depends(get_current_user),
+):
+    """자료의 학습용 마크다운 인덱스를 반환합니다."""
+    cls = get_class(class_id)
+    if not cls or cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+
+    content = get_material_index(user["email"], class_id, material_name)
+    if content is None:
+        return {"status": "not_ready", "content": ""}
+    return {"status": "ready", "content": content}
+
+
+@app.post("/api/classes/{class_id}/materials/{material_name}/index/regenerate")
+async def material_index_regenerate(
+    class_id: str,
+    material_name: str,
+    user: dict = Depends(get_current_user),
+):
+    """자료의 마크다운 인덱스를 재생성합니다."""
+    cls = get_class(class_id)
+    if not cls or cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+
+    content = regenerate_material_index(user["email"], class_id, material_name)
+    if content is None:
+        raise HTTPException(status_code=404, detail="원본 PDF를 찾을 수 없습니다.")
+    return {"status": "ready", "content": content}
 
 
 # --- Chat Endpoints ---

@@ -117,6 +117,21 @@ export async function getCompletedMaterials(classId: string) {
   return apiGet<{ materials: string[] }>(`/classes/${classId}/completed-materials`);
 }
 
+// --- Material Index ---
+
+export async function getMaterialIndex(classId: string, materialName: string) {
+  return apiGet<{ status: 'ready' | 'not_ready'; content: string }>(
+    `/classes/${classId}/materials/${encodeURIComponent(materialName)}/index`,
+  );
+}
+
+export async function regenerateMaterialIndex(classId: string, materialName: string) {
+  return apiPost<{ status: 'ready'; content: string }>(
+    `/classes/${classId}/materials/${encodeURIComponent(materialName)}/index/regenerate`,
+    {},
+  );
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;

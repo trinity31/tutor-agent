@@ -19,11 +19,14 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from .agents.graph import build_graph
 from .file_search import (
+    generate_material_index,
     get_client as get_genai_client,
     get_or_create_store,
     get_indexing_status,
     load_manifest,
+    load_material_index,
     save_manifest,
+    save_material_index,
     set_indexing_status,
     upload_pdf,
     upload_pdf_start,
@@ -204,15 +207,42 @@ def upload_material(user_id: str, file_path: str, display_name: str, class_id: s
 logger = logging.getLogger(__name__)
 
 
-def finish_indexing(op, store_name: str, display_name: str):
-    """백그라운드에서 인덱싱 완료를 대기하고 상태를 업데이트합니다."""
+def finish_indexing(op, store_name: str, display_name: str, user_id: str = "", class_id: str = ""):
+    """백그라운드에서 인덱싱 완료를 대기하고 마크다운 인덱스를 생성합니다."""
     try:
         wait_for_indexing(op)
-        set_indexing_status(store_name, display_name, "ready")
         logger.info(f"인덱싱 완료: {display_name}")
+
+        if user_id and class_id:
+            pdf_path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
+            if pdf_path.exists() and not load_material_index(user_id, class_id, display_name):
+                try:
+                    md = generate_material_index(str(pdf_path), display_name)
+                    if md:
+                        save_material_index(user_id, class_id, display_name, md)
+                except Exception:
+                    logger.exception(f"인덱스 생성 실패: {display_name}")
+
+        set_indexing_status(store_name, display_name, "ready")
     except Exception:
         set_indexing_status(store_name, display_name, "error")
         logger.exception(f"인덱싱 실패: {display_name}")
+
+
+def get_material_index(user_id: str, class_id: str, display_name: str) -> str | None:
+    """저장된 마크다운 인덱스를 반환합니다 (없으면 None)."""
+    return load_material_index(user_id, class_id, display_name)
+
+
+def regenerate_material_index(user_id: str, class_id: str, display_name: str) -> str | None:
+    """PDF가 로컬에 있으면 마크다운 인덱스를 재생성하여 저장합니다."""
+    pdf_path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
+    if not pdf_path.exists():
+        return None
+    md = generate_material_index(str(pdf_path), display_name)
+    if md:
+        save_material_index(user_id, class_id, display_name, md)
+    return md
 
 
 def get_material_indexing_status(user_id: str, class_id: str, display_name: str) -> str:

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
 import MessageBubble from './MessageBubble';
@@ -8,6 +8,7 @@ import OnboardingCards from '../onboarding/OnboardingCards';
 import QuizCard from '../quiz/QuizCard';
 import QuizResult from '../quiz/QuizResult';
 import ErrorMessage from '../common/ErrorMessage';
+import MaterialIndexPanel from '../material/MaterialIndexPanel';
 
 export default function ChatArea() {
   const {
@@ -27,6 +28,14 @@ export default function ChatArea() {
 
   const { classes, selectedClassId, selectedMaterials } = useClassStore();
   const selectedClass = classes.find((c) => c.id === selectedClassId);
+
+  const indexableMaterial =
+    selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
+  const [indexPanelOpen, setIndexPanelOpen] = useState(true);
+
+  useEffect(() => {
+    if (indexableMaterial) setIndexPanelOpen(true);
+  }, [indexableMaterial]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +67,8 @@ export default function ChatArea() {
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden">
       {/* Context bar */}
       {selectedClass && (
         <div className="flex items-center gap-2 border-b border-warm-100 bg-primary-50/50 px-4 py-2">
@@ -74,6 +84,15 @@ export default function ChatArea() {
                   : `${selectedMaterials.length}개 자료 선택`}
               </span>
             </>
+          )}
+          {indexableMaterial && !indexPanelOpen && (
+            <button
+              onClick={() => setIndexPanelOpen(true)}
+              className="ml-auto rounded-md border border-primary-200 bg-white px-2 py-0.5 text-[11px] font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+              title="학습 인덱스 열기"
+            >
+              인덱스 보기
+            </button>
           )}
         </div>
       )}
@@ -152,6 +171,18 @@ export default function ChatArea() {
           }
           inputDisabled={!selectedClassId}
         />
+      )}
+      </div>
+
+      {/* Index panel (자료 1개 선택 시) */}
+      {indexableMaterial && indexPanelOpen && selectedClassId && (
+        <div className="hidden w-md shrink-0 md:block lg:w-lg">
+          <MaterialIndexPanel
+            classId={selectedClassId}
+            materialName={indexableMaterial}
+            onClose={() => setIndexPanelOpen(false)}
+          />
+        </div>
       )}
     </div>
   );
