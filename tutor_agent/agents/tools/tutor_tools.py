@@ -6,7 +6,10 @@ import logging
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from tutor_agent.file_search import search as file_search
+from tutor_agent.file_search import (
+    load_material_index,
+    search as file_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +115,28 @@ def get_study_memos(subject: str, config: RunnableConfig) -> str:
     }
 
     return json.dumps(result, ensure_ascii=False)
+
+
+@tool
+def get_material_index(config: RunnableConfig) -> str:
+    """현재 선택된 강의 자료의 학습 인덱스(목차형 마크다운)를 반환합니다.
+
+    자료 전체 구조를 한눈에 파악할 때 사용하세요.
+    퀴즈 출제 시 균형 있는 주제 선정에 활용합니다.
+
+    Returns:
+        마크다운 인덱스 텍스트. 없으면 "인덱스 없음" 안내.
+    """
+    cfg = config.get("configurable", {})
+    user_id = cfg.get("user_id", "")
+    class_id = cfg.get("class_id", "")
+    material_name = cfg.get("material_name", "")
+    logger.info(f"[TOOL] get_material_index — user={user_id}, class={class_id}, material={material_name}")
+
+    if not (user_id and class_id and material_name):
+        return "인덱스 없음 (자료가 선택되지 않았거나 단일 자료가 아닙니다). search_material로 진행하세요."
+
+    content = load_material_index(user_id, class_id, material_name)
+    if not content:
+        return "인덱스 없음 (이 자료의 인덱스가 아직 생성되지 않았습니다). search_material로 진행하세요."
+    return content
