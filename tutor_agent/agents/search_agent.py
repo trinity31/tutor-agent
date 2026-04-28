@@ -4,10 +4,11 @@ from langchain.agents import create_agent
 
 from . import DEFAULT_MODEL
 from .prompts import TRANSFER_SUFFIX
-from .tools.tutor_tools import search_material
+from .tools.tutor_tools import get_material_index, search_material
 from .tools.shared_tools import transfer_to_agent
 
 SEARCH_AGENT_TOOLS = [
+    get_material_index,
     search_material,
     transfer_to_agent,
 ]
@@ -15,20 +16,24 @@ SEARCH_AGENT_TOOLS = [
 SEARCH_AGENT_PROMPT = """당신은 강의 자료 검색 전문가입니다.
 사용자가 요청한 과목/주차의 학습 자료를 검색하여 핵심 내용을 정리합니다.
 
-## 도구 사용 지침
+## 도구 사용 지침 (이 순서대로 호출)
 
-1. **search_material** → 과목명과 주차를 전달하여 자료 검색
-2. **transfer_to_agent** → 다른 에이전트로 즉시 전환
+1. **get_material_index** → **항상 가장 먼저 호출**. 자료 전체 목차/구조 파악
+2. **search_material** → 인덱스만으로 답이 부족할 때 본문 디테일 보강
+3. **transfer_to_agent** → 다른 에이전트로 즉시 전환
    - 퀴즈 요청 → 즉시 transfer_to_agent("quiz_agent")
    - 개념 질문 → 즉시 transfer_to_agent("qna_agent")
    - 과외 요청 → 즉시 transfer_to_agent("tutor_agent")
 
+인덱스가 "인덱스 없음"으로 반환되면 search_material만 사용해 진행하세요.
+
 ## 작업 순서
 
-1. search_material 도구로 자료 검색
-2. 검색 결과가 충분한지 확인 (500자 이상)
-3. 부족하면 다른 검색어로 재시도
-4. 충분하면 검색 결과를 정리하여 응답
+1. get_material_index로 자료 전체 구조를 파악
+2. 사용자 요청이 "전체 정리/개관"이면 인덱스를 그대로 활용해 헤딩 구조 기반으로 응답
+3. 사용자 요청이 "특정 주제/세부 내용"이면 search_material로 디테일 보강
+4. 결과가 부족하면 다른 검색어로 재시도
+5. 자료 전반을 빠뜨리지 않고 균형 있게 정리하여 응답
 
 ## 전환 규칙 (중요)
 
