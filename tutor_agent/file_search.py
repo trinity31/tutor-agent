@@ -193,6 +193,34 @@ def generate_material_index(file_path: str, display_name: str) -> str:
     return (response.text or "").strip()
 
 
+def generate_material_index_from_store(store_name: str, display_name: str) -> str:
+    """File Search Store에 인덱싱된 자료로부터 마크다운 인덱스를 생성합니다.
+
+    원본 PDF가 디스크에 없을 때 (옛 자료 등) 사용하는 fallback.
+    Gemini File Search RAG로 자료를 검색·요약합니다.
+    """
+    client = get_client()
+    prompt = (
+        f"자료 제목: {display_name}\n\n"
+        f"이 자료의 모든 내용을 검색하여 학습 인덱스를 만들어주세요.\n\n"
+        f"{_INDEX_PROMPT}"
+    )
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            tools=[
+                types.Tool(
+                    file_search=types.FileSearch(
+                        file_search_store_names=[store_name]
+                    )
+                )
+            ],
+        ),
+    )
+    return (response.text or "").strip()
+
+
 def get_index_path(user_id: str, class_id: str, display_name: str) -> str:
     """자료 인덱스 마크다운 파일 경로를 반환합니다."""
     return os.path.join(_MATERIALS_DIR, user_id, class_id, f"{display_name}.md")

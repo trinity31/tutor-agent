@@ -267,7 +267,10 @@ async def material_index_regenerate(
 
     content = regenerate_material_index(user["email"], class_id, material_name)
     if content is None:
-        raise HTTPException(status_code=404, detail="원본 PDF를 찾을 수 없습니다.")
+        raise HTTPException(
+            status_code=500,
+            detail="인덱스 생성에 실패했습니다. 잠시 후 다시 시도하거나 자료를 다시 업로드해 주세요.",
+        )
     return {"status": "ready", "content": content}
 
 

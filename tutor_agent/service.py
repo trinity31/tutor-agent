@@ -20,6 +20,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from .agents.graph import build_graph
 from .file_search import (
     generate_material_index,
+    generate_material_index_from_store,
     get_client as get_genai_client,
     get_or_create_store,
     get_indexing_status,
@@ -235,14 +236,31 @@ def get_material_index(user_id: str, class_id: str, display_name: str) -> str | 
 
 
 def regenerate_material_index(user_id: str, class_id: str, display_name: str) -> str | None:
-    """PDF가 로컬에 있으면 마크다운 인덱스를 재생성하여 저장합니다."""
+    """마크다운 인덱스를 재생성하여 저장합니다.
+
+    PDF 원본이 디스크에 있으면 PDF 직접 입력 방식 사용 (정확도 우선),
+    없으면 File Search Store fallback 사용 (옛 자료용).
+    """
     pdf_path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
-    if not pdf_path.exists():
-        return None
-    md = generate_material_index(str(pdf_path), display_name)
+    md: str | None = None
+
+    if pdf_path.exists():
+        try:
+            md = generate_material_index(str(pdf_path), display_name)
+        except Exception:
+            logger.exception(f"PDF 기반 인덱스 생성 실패: {display_name}")
+
+    if not md:
+        store_name = _store_name_for(user_id, class_id)
+        try:
+            md = generate_material_index_from_store(store_name, display_name)
+        except Exception:
+            logger.exception(f"Store 기반 인덱스 생성 실패: {display_name}")
+            return None
+
     if md:
         save_material_index(user_id, class_id, display_name, md)
-    return md
+    return md or None
 
 
 def get_material_indexing_status(user_id: str, class_id: str, display_name: str) -> str:
