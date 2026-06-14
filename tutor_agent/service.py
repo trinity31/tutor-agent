@@ -126,19 +126,17 @@ async def stream_chat(
             "material_name": material_name,
         }
     }
+    graph_input = {
+        "messages": [HumanMessage(content=user_message)],
+        "user_id": user_id,
+        "class_id": class_id,
+        "store_name": store_name,
+        "material_name": material_name,
+    }
 
-    try:
-        for event in _graph.stream(
-            {
-                "messages": [HumanMessage(content=user_message)],
-                "user_id": user_id,
-                "class_id": class_id,
-                "store_name": store_name,
-                "material_name": material_name,
-            },
-            config=config,
-            stream_mode="updates",
-        ):
+    # 그래프를 한 번 실행하며 agent_status 이벤트를 yield하는 동기 제너레이터.
+    def _stream_statuses():
+        for event in _graph.stream(graph_input, config=config, stream_mode="updates"):
             for node_name in event:
                 if node_name != "supervisor_agent":
                     label = AGENT_LABELS.get(node_name, node_name)
@@ -147,11 +145,31 @@ async def stream_chat(
                         "data": {"agent": node_name, "label": label},
                     }
 
-        # 최종 상태에서 응답 추출
-        snapshot = _graph.get_state(config)
-        final_values = snapshot.values
-        current_agent = final_values.get("current_agent", "")
-        ai_content = extract_ai_content(final_values)
+    # 이번 턴에 새로 추가된 메시지에서만 응답을 추출한다.
+    # (전체 히스토리를 스캔하면 supervisor가 빈 응답을 내어 이번 턴 답이 없을 때
+    #  이전 턴의 옛 퀴즈를 잘못 재사용하게 된다.)
+    def _extract_turn(before: int) -> tuple[str, str]:
+        final_values = _graph.get_state(config).values
+        turn_messages = final_values.get("messages", [])[before:]
+        return (
+            extract_ai_content({"messages": turn_messages}),
+            final_values.get("current_agent", ""),
+        )
+
+    try:
+        before = len(_graph.get_state(config).values.get("messages", []))
+        for ev in _stream_statuses():
+            yield ev
+        ai_content, current_agent = _extract_turn(before)
+
+        # 빈 응답(LLM이 텍스트·tool 호출 없는 응답을 반환)이면 1회 자동 재시도.
+        # gemini-2.5-flash가 간헐적으로 빈 응답을 내는 것을 서버가 흡수한다.
+        if not ai_content:
+            logger.warning("빈 응답 감지 — 자동 재시도합니다.")
+            before = len(_graph.get_state(config).values.get("messages", []))
+            for ev in _stream_statuses():
+                yield ev
+            ai_content, current_agent = _extract_turn(before)
 
         if not ai_content:
             yield {
