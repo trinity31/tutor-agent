@@ -5,13 +5,14 @@ from langchain.agents import create_agent
 from . import DEFAULT_MODEL
 from .prompts import TRANSFER_SUFFIX
 from .tools.tutor_tools import get_material_index, get_study_memos, search_material
-from .tools.shared_tools import transfer_to_agent
 
+# quiz_agent는 그래프상 종료 노드다. 다른 에이전트로 전환할 필요가 없으므로
+# transfer_to_agent를 제공하지 않는다. (도구로 두면 모델이 퀴즈 JSON을 내는 대신
+# 자기 자신으로 self-transfer를 호출해 재진입 루프 → recursion 소진 → 빈 응답 실패가 났다.)
 QUIZ_AGENT_TOOLS = [
     get_material_index,
     search_material,
     get_study_memos,
-    transfer_to_agent,
 ]
 
 QUIZ_AGENT_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니다.
@@ -28,9 +29,12 @@ QUIZ_AGENT_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니�
 1. **get_material_index** → **항상 가장 먼저 호출**. 자료의 전체 목차/주제 분포 파악 (균형 출제용)
 2. **get_study_memos** → 학습 메모 조회 (메모가 없으면 무시하고 진행)
 3. **search_material** → 인덱스에 등장한 주제 중 디테일/오답이 더 필요한 부분만 보강 검색
-4. **transfer_to_agent** → 다른 에이전트로 즉시 전환
+   - **search_material는 최대 3회까지만 호출하세요.** 섹션마다 따로 검색하지 말고,
+     여러 주제를 묶어 폭넓은 쿼리로 검색하세요. 인덱스만으로 충분하면 검색을 생략해도 됩니다.
 
-인덱스가 "인덱스 없음"으로 반환되면 search_material만 사용해 진행하세요.
+인덱스가 "인덱스 없음"으로 반환되면 search_material로만 진행하세요.
+
+도구 호출이 끝나면 **곧바로 아래 JSON 형식으로 퀴즈를 출력**하세요. 다른 도구를 다시 호출하지 마세요.
 
 ## 퀴즈 생성 규칙
 

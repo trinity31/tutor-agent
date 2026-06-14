@@ -118,6 +118,9 @@ async def stream_chat(
     """채팅 메시지를 처리하고 SSE 이벤트를 yield합니다."""
     store_name = _store_name_for(user_id, class_id)
     config = {
+        # 도구를 많이 호출하는 자료(섹션이 많은 인덱스)에서도 최종 응답까지
+        # 도달하도록 기본값(25)보다 여유를 둔다.
+        "recursion_limit": 50,
         "configurable": {
             "thread_id": f"{user_id}_{thread_id}",
             "user_id": user_id,
@@ -402,7 +405,7 @@ async def run_scheduled_quiz_generation() -> list[dict]:
                 # 새 퀴즈 생성 — LangGraph 그래프 사용
                 store_name = _store_name_for(comp["user_email"], comp["class_id"])
                 thread_id = str(uuid.uuid4())
-                config = {"configurable": {
+                config = {"recursion_limit": 50, "configurable": {
                     "thread_id": f"{comp['user_email']}_{thread_id}",
                     "user_id": comp["user_email"],
                     "class_id": comp["class_id"],
