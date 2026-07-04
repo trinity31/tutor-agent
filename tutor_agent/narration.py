@@ -20,15 +20,21 @@ _HANJA_WORD_RE = re.compile(rf"(?<![가-힣A-Za-z0-9])[{_HANJA}]+(?![가-힣A-Za
 _BROKEN_GLYPH_RE = re.compile("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\ufffd\\ue000-\\uf8ff]")
 # 가운뎃점 계열 특수 구두점 → 쉼표로 (낭독 시 자연스러운 끊어읽기)
 _MIDDLE_DOT_RE = re.compile(r"\s*[‧∙・·•ㆍ]\s*")
-# 단어에 붙어 추출되는 불릿·박스 기호 → 공백 (슬라이드 글머리표)
-_BULLET_RE = re.compile(r"[￭￮■□▪▫◆◇●○▶▷◀◁]")
+# 단어에 붙어 추출되는 불릿·박스 기호 → 문장 경계 (슬라이드에서 제목·항목
+# 구분자로 쓰이므로, 마침표로 바꿔 제목이 본문과 한 문장으로 붙지 않게 한다)
+_BULLET_RE = re.compile(r"\s*[￭￮■□▪▫◆◇●○▶▷◀◁]\s*")
 # 인용부호 제거: 낭독에 불필요하고, 슬라이드형 PDF에서는 본문과 분리되어
 # 추출되는 주범. 영어 축약형(don't)의 아포스트로피만 보존.
 _QUOTE_RE = re.compile(r"[\"“”‘’]|(?<![A-Za-z])'|'(?![A-Za-z])")
-# 원래 위치(항목 앞)를 잃고 단어 끝에 붙어 추출된 번호와 각주 참조.
-# 슬라이드형 PDF에서 "3) 명과 풍수의 관계"가 "명과 풍수의 관계3)"로,
-# 각주 참조가 "않는다.2)"로 추출된다. 공백 없이 단어에 붙은 것만 제거하므로
-# 정상 순서의 목록 번호("3) 제목")는 보존된다.
+# 슬라이드형 PDF에서 제목 번호는 줄 끝으로 밀려 추출된다:
+# "3) 명과 풍수의 관계" → "명과 풍수의 관계3)". 문장 종결부호가 없는 줄이
+# 번호로 끝나면 제목으로 보고 번호를 앞으로 복원한다.
+_DISLOCATED_HEADING_RE = re.compile(r"^([^.!?…]*[가-힣][^.!?…]*?)\s*(\d{1,3}[).])\s*$")
+# 정상 순서의 제목 줄("3) 제목") — 독립 문장으로 만들어 구조를 보존
+_LEADING_NUM_HEADING_RE = re.compile(r"^\d{1,3}[).]\s*[^.!?…]{2,60}$")
+
+# 원래 위치를 잃고 문장 중간 단어 끝에 붙어 추출된 각주 참조
+# ("않는다.2)", "전문가1)를"). 공백 없이 단어에 붙은 것만 제거.
 _STRAY_NUM_PAREN_RE = re.compile(r"(?<=[가-힣A-Za-z.!?…])\d{1,3}\)")
 _STRAY_NUM_DOT_RE = re.compile(r"(?<=[가-힣])\d{1,3}\.(?=\s|$)")
 
@@ -56,13 +62,25 @@ def clean_text(text: str) -> str:
     text = _BROKEN_GLYPH_RE.sub("", text)
     text = _URL_RE.sub(" ", text)
     text = _MIDDLE_DOT_RE.sub(", ", text)
-    text = _BULLET_RE.sub(" ", text)
+    text = _BULLET_RE.sub(". ", text)
     text = _QUOTE_RE.sub("", text)
-    # 단어 끝에 붙은 번호("관계3)")·각주 참조("않는다.2)")·제목 번호("풍수용어1.") 제거
-    text = _STRAY_NUM_PAREN_RE.sub("", text)
-    text = _STRAY_NUM_DOT_RE.sub(".", text)
     # 빈 괄호(한자만 들어있던 괄호의 잔여물) 제거
     text = re.sub(r"\(\s*\)", "", text)
+    # 제목 줄 처리: 줄 끝으로 밀린 번호를 앞으로 복원하고, 제목을
+    # 마침표로 닫아 독립 문장으로 유지 (구조가 낭독·하이라이트에 드러남)
+    def _fix_heading(line: str) -> str:
+        stripped = line.strip()
+        m = _DISLOCATED_HEADING_RE.match(stripped)
+        if m:
+            return f"{m.group(2)} {m.group(1).strip()}."
+        if _LEADING_NUM_HEADING_RE.match(stripped):
+            return f"{stripped}."
+        return line
+
+    text = "\n".join(_fix_heading(line) for line in text.split("\n"))
+    # 문장 중간 단어 끝에 남은 각주 참조("않는다.2)", "전문가1)를") 제거
+    text = _STRAY_NUM_PAREN_RE.sub("", text)
+    text = _STRAY_NUM_DOT_RE.sub(".", text)
     # 고아 구두점 어절 정리 (줄 단위 — 줄 구조 보존):
     # 문장 종결부호가 섞여 있으면 마침표로 축약해 문장 경계를 보존하고,
     # 아니면 통째로 제거. 이어서 앞 어절과 분리된 문장부호를 붙인다
