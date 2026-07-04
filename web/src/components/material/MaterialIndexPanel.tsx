@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getMaterialIndex, regenerateMaterialIndex } from '../../api/client';
+import AudioReader from '../audio/AudioReader';
 
 interface Props {
   classId: string;
@@ -12,6 +13,11 @@ export default function MaterialIndexPanel({ classId, materialName, onClose }: P
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'not_ready' | 'error'>('loading');
   const [regenerating, setRegenerating] = useState(false);
+  const [mode, setMode] = useState<'index' | 'audio'>('index');
+
+  useEffect(() => {
+    setMode('index');
+  }, [classId, materialName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,14 +59,21 @@ export default function MaterialIndexPanel({ classId, materialName, onClose }: P
       <header className="flex items-center justify-between border-b border-warm-100 bg-white px-4 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-warm-500">
-            학습 인덱스
+            {mode === 'audio' ? '원문 낭독' : '학습 인덱스'}
           </p>
           <p className="truncate text-sm font-medium text-warm-800" title={materialName}>
             {materialName}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {status === 'ready' && (
+          <button
+            onClick={() => setMode(mode === 'audio' ? 'index' : 'audio')}
+            className="rounded-md px-2 py-1 text-xs font-medium text-warm-500 hover:bg-warm-100 hover:text-warm-700 transition-colors"
+            title={mode === 'audio' ? '학습 인덱스 보기' : '원문 낭독 듣기'}
+          >
+            {mode === 'audio' ? '📑 인덱스' : '🎧 듣기'}
+          </button>
+          {mode === 'index' && status === 'ready' && (
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
@@ -88,6 +101,11 @@ export default function MaterialIndexPanel({ classId, materialName, onClose }: P
       </header>
 
       {/* Content */}
+      {mode === 'audio' ? (
+        <div className="flex-1 overflow-hidden">
+          <AudioReader classId={classId} materialName={materialName} />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {status === 'loading' && (
           <p className="text-sm text-warm-400">인덱스를 불러오는 중...</p>
@@ -118,6 +136,7 @@ export default function MaterialIndexPanel({ classId, materialName, onClose }: P
           </div>
         )}
       </div>
+      )}
     </aside>
   );
 }

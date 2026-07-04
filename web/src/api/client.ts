@@ -132,6 +132,86 @@ export async function regenerateMaterialIndex(classId: string, materialName: str
   );
 }
 
+// --- 원문 낭독 (Audio) ---
+
+export interface AudioSection {
+  section: string;
+  title: string;
+}
+
+export interface AudioChunk {
+  text: string;
+  start: number;
+  end: number;
+  sentences: string[];
+}
+
+export interface AudioManifest {
+  voice: string;
+  format: string;
+  duration: number;
+  chunks: AudioChunk[];
+}
+
+export type AudioStatus = 'none' | 'pending' | 'generating' | 'ready' | 'failed';
+
+function audioBase(classId: string, materialName: string): string {
+  return `/classes/${classId}/materials/${encodeURIComponent(materialName)}/audio`;
+}
+
+export async function getAudioSections(classId: string, materialName: string) {
+  return apiGet<{
+    sections: AudioSection[];
+    voices: Record<string, string>;
+    default_voice: string;
+  }>(`${audioBase(classId, materialName)}/sections`);
+}
+
+export async function requestAudio(
+  classId: string,
+  materialName: string,
+  section: string,
+  voice: string,
+) {
+  return apiPost<{ status: AudioStatus; duration?: number }>(
+    audioBase(classId, materialName),
+    { section, voice },
+  );
+}
+
+export async function getAudioStatus(
+  classId: string,
+  materialName: string,
+  section: string,
+  voice: string,
+) {
+  return apiGet<{ status: AudioStatus; duration: number }>(
+    `${audioBase(classId, materialName)}/status?section=${encodeURIComponent(section)}&voice=${voice}`,
+  );
+}
+
+export async function getAudioManifest(
+  classId: string,
+  materialName: string,
+  section: string,
+  voice: string,
+) {
+  return apiGet<AudioManifest>(
+    `${audioBase(classId, materialName)}/manifest?section=${encodeURIComponent(section)}&voice=${voice}`,
+  );
+}
+
+export function audioFileUrl(
+  classId: string,
+  materialName: string,
+  section: string,
+  voice: string,
+): string {
+  // <audio> 태그는 Authorization 헤더를 붙일 수 없어 token 쿼리 파라미터 사용
+  const token = getToken() ?? '';
+  return `${API_BASE}${audioBase(classId, materialName)}/file?section=${encodeURIComponent(section)}&voice=${voice}&token=${encodeURIComponent(token)}`;
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;
