@@ -8,8 +8,11 @@ import logging
 import os
 import re
 import shutil
+import struct
+import subprocess
 import uuid
 from collections.abc import AsyncGenerator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,8 @@ from .file_search import (
     wait_for_indexing,
     GEMINI_MODEL,
 )
+from .narration import build_narration_chunks
+from .tts import GeminiTTSEngine, PCM_RATE, pcm_duration
 
 # --- 그래프 싱글턴 ---
 _checkpointer = MemorySaver()
@@ -339,6 +344,237 @@ def generate_example_messages(user_id: str, class_id: str, material_names: str =
 def new_thread_id() -> str:
     """새 스레드 ID를 생성합니다."""
     return str(uuid.uuid4())
+
+
+# --- 원문 낭독 (Read-Aloud) ---
+
+_AUDIO_DIR = Path(__file__).parent.parent / "data" / "audio"
+
+# 섹션(챕터) = 페이지 그룹. 요청된 섹션만 온디맨드로 생성하여 TTS 비용을 제한한다.
+AUDIO_SECTION_PAGES = 8
+_SECTION_RE = re.compile(r"p(\d+)-(\d+)$")
+# TTS 동시 호출 수 (rate limit과 첫 재생 대기 시간의 균형)
+_TTS_CONCURRENCY = 3
+
+_tts_engine = GeminiTTSEngine()
+
+
+def _audio_base(user_id: str, material_id: str, section: str, voice: str) -> Path:
+    """오디오 파일 경로의 확장자 없는 base를 반환합니다."""
+    return _AUDIO_DIR / user_id / material_id / f"{section}_{voice}"
+
+
+def _pdf_page_count(pdf_path: Path) -> int:
+    from pypdf import PdfReader
+
+    return len(PdfReader(str(pdf_path)).pages)
+
+
+def get_audio_sections(user_id: str, class_id: str, material_name: str) -> list[dict] | None:
+    """자료의 낭독 섹션 목록을 반환합니다. PDF가 없으면 None."""
+    pdf_path = get_material_path(user_id, class_id, material_name)
+    if not pdf_path:
+        return None
+    total = _pdf_page_count(pdf_path)
+    sections = []
+    for start in range(1, total + 1, AUDIO_SECTION_PAGES):
+        end = min(start + AUDIO_SECTION_PAGES - 1, total)
+        sections.append({"section": f"p{start}-{end}", "title": f"{start}~{end}쪽"})
+    return sections
+
+
+def _parse_section(section: str) -> tuple[int, int] | None:
+    """섹션 ID('p1-8')를 페이지 범위(1-based)로 파싱합니다."""
+    m = _SECTION_RE.match(section)
+    if not m:
+        return None
+    start, end = int(m.group(1)), int(m.group(2))
+    if start < 1 or end < start:
+        return None
+    return start, end
+
+
+def request_audio(
+    user_id: str, class_id: str, material_name: str, section: str, voice: str
+) -> dict:
+    """오디오 생성을 요청합니다. 캐시가 있으면 즉시 ready를 반환합니다.
+
+    Returns:
+        {"status": ..., "duration": ...} — "_start"가 True면 호출자가
+        백그라운드 생성(generate_audio_asset)을 시작해야 합니다.
+    """
+    from .auth import create_audio_asset, get_audio_asset, reset_audio_asset
+
+    asset = get_audio_asset(user_id, class_id, material_name, section, voice)
+    if asset:
+        if asset["status"] == "ready" and Path(asset["file_path"]).exists():
+            return {"status": "ready", "duration": asset["duration"]}
+        if asset["status"] in ("pending", "generating"):
+            return {"status": asset["status"]}
+        # failed 또는 파일이 사라진 ready → 재생성 선점
+        if reset_audio_asset(asset["id"]):
+            return {"status": "pending", "_start": True}
+        return {"status": "pending"}
+
+    if create_audio_asset(user_id, class_id, material_name, section, voice):
+        return {"status": "pending", "_start": True}
+    # 동시 요청이 먼저 선점한 경우
+    asset = get_audio_asset(user_id, class_id, material_name, section, voice)
+    return {"status": asset["status"] if asset else "pending"}
+
+
+def get_audio_status(
+    user_id: str, class_id: str, material_name: str, section: str, voice: str
+) -> dict:
+    """오디오 생성 상태를 반환합니다."""
+    from .auth import get_audio_asset
+
+    asset = get_audio_asset(user_id, class_id, material_name, section, voice)
+    if not asset:
+        return {"status": "none", "duration": 0}
+    return {"status": asset["status"], "duration": asset["duration"]}
+
+
+def get_audio_file(
+    user_id: str, class_id: str, material_name: str, section: str, voice: str
+) -> tuple[Path, str] | None:
+    """ready 상태인 오디오 파일 경로와 media type을 반환합니다."""
+    from .auth import get_audio_asset
+
+    asset = get_audio_asset(user_id, class_id, material_name, section, voice)
+    if not asset or asset["status"] != "ready":
+        return None
+    path = Path(asset["file_path"])
+    if not path.exists():
+        return None
+    media_type = "audio/mpeg" if path.suffix == ".mp3" else "audio/wav"
+    return path, media_type
+
+
+def get_audio_manifest(
+    user_id: str, class_id: str, material_name: str, section: str, voice: str
+) -> dict | None:
+    """오디오 매니페스트 JSON을 반환합니다 (프론트 하이라이트 동기화용)."""
+    manifest_path = Path(
+        f"{_audio_base(user_id, material_name, section, voice)}.manifest.json"
+    )
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def _pcm_to_wav(pcm: bytes, path: Path, rate: int = PCM_RATE) -> None:
+    """PCM(s16le mono)에 WAV 헤더를 붙여 저장합니다 (tts-demo 참조)."""
+    with open(path, "wb") as f:
+        f.write(b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVE")
+        f.write(b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16))
+        f.write(b"data" + struct.pack("<I", len(pcm)) + pcm)
+
+
+def _encode_audio(pcm: bytes, base: Path) -> Path:
+    """PCM을 MP3로 인코딩합니다. ffmpeg이 없으면 WAV로 폴백합니다."""
+    base.parent.mkdir(parents=True, exist_ok=True)
+    if shutil.which("ffmpeg"):
+        mp3_path = base.with_suffix(".mp3")
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "s16le", "-ar", str(PCM_RATE), "-ac", "1", "-i", "pipe:0",
+                "-b:a", "64k", str(mp3_path),
+            ],
+            input=pcm,
+            check=True,
+            capture_output=True,
+        )
+        return mp3_path
+    wav_path = base.with_suffix(".wav")
+    _pcm_to_wav(pcm, wav_path)
+    return wav_path
+
+
+def generate_audio_asset(
+    user_id: str, class_id: str, material_name: str, section: str, voice: str
+):
+    """백그라운드에서 섹션 오디오를 생성합니다.
+
+    PDF 섹션 텍스트 → 낭독 정제 → 청크별 TTS → 병합 + 매니페스트 저장.
+    Gemini TTS는 타임스탬프를 주지 않으므로 청크별 PCM 길이로
+    정확한 재생 시간을 계산해 매니페스트에 기록한다.
+    """
+    from pypdf import PdfReader
+
+    from .auth import get_audio_asset, update_audio_asset
+
+    asset = get_audio_asset(user_id, class_id, material_name, section, voice)
+    if not asset or asset["status"] not in ("pending", "generating"):
+        return
+
+    def _fail(reason: str):
+        logger.error(f"오디오 생성 실패: {material_name}/{section} — {reason}")
+        update_audio_asset(asset["id"], status="failed")
+
+    try:
+        update_audio_asset(asset["id"], status="generating")
+
+        pdf_path = get_material_path(user_id, class_id, material_name)
+        pages = _parse_section(section)
+        if not pdf_path or not pages:
+            return _fail("PDF 또는 섹션을 찾을 수 없음")
+
+        reader = PdfReader(str(pdf_path))
+        start, end = pages
+        raw_text = "\n".join(
+            page.extract_text() or "" for page in reader.pages[start - 1 : end]
+        )
+        chunks = build_narration_chunks(raw_text)
+        if not chunks:
+            return _fail("낭독할 문장이 없음 (이미지 기반 PDF일 수 있음)")
+
+        # 청크별 TTS 호출 (제한된 동시성)
+        with ThreadPoolExecutor(max_workers=_TTS_CONCURRENCY) as pool:
+            pcms = list(
+                pool.map(lambda c: _tts_engine.synthesize(" ".join(c), voice), chunks)
+            )
+
+        # 병합 + 청크별 정확한 재생 시간 계산 (하이라이트 동기화 근거)
+        manifest_chunks = []
+        cursor = 0.0
+        for sentences, pcm in zip(chunks, pcms):
+            duration = pcm_duration(pcm)
+            manifest_chunks.append({
+                "text": " ".join(sentences),
+                "start": round(cursor, 2),
+                "end": round(cursor + duration, 2),
+                "sentences": sentences,
+            })
+            cursor += duration
+
+        base = _audio_base(user_id, material_name, section, voice)
+        file_path = _encode_audio(b"".join(pcms), base)
+
+        manifest = {
+            "voice": voice,
+            "format": file_path.suffix.lstrip("."),
+            "duration": round(cursor, 2),
+            "chunks": manifest_chunks,
+        }
+        with open(f"{base}.manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False)
+
+        update_audio_asset(
+            asset["id"],
+            status="ready",
+            duration=round(cursor, 2),
+            file_path=str(file_path),
+        )
+        logger.info(
+            f"오디오 생성 완료: {material_name}/{section} ({voice}, {cursor:.0f}초, {len(chunks)}청크)"
+        )
+    except Exception:
+        logger.exception(f"오디오 생성 실패: {material_name}/{section}")
+        update_audio_asset(asset["id"], status="failed")
 
 
 # --- 복습 스케줄링 ---

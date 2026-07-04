@@ -106,6 +106,23 @@ def _get_db() -> sqlite3.Connection:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS audio_assets (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            class_id TEXT NOT NULL,
+            material_id TEXT NOT NULL,
+            section TEXT NOT NULL,
+            voice TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            duration REAL NOT NULL DEFAULT 0,
+            file_path TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(user_id, class_id, material_id, section, voice)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS study_notes (
             id TEXT PRIMARY KEY,
             user_email TEXT NOT NULL,
@@ -477,6 +494,89 @@ def mark_completion_generated(completion_id: str, quiz_id: str):
         conn.execute(
             "UPDATE completions SET quiz_generated = 1, generated_quiz_id = ? WHERE id = ?",
             (quiz_id, completion_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# --- 오디오 에셋 CRUD (원문 낭독) ---
+
+
+def get_audio_asset(
+    user_id: str, class_id: str, material_id: str, section: str, voice: str
+) -> dict | None:
+    """오디오 에셋을 조회합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            """SELECT * FROM audio_assets
+               WHERE user_id = ? AND class_id = ? AND material_id = ?
+               AND section = ? AND voice = ?""",
+            (user_id.lower(), class_id, material_id, section, voice),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_audio_asset(
+    user_id: str, class_id: str, material_id: str, section: str, voice: str
+) -> bool:
+    """오디오 에셋을 pending으로 생성합니다.
+
+    Returns:
+        True면 이 호출이 레코드를 선점 (생성 시작 책임), 이미 존재하면 False.
+        동시 요청 시 중복 생성을 막습니다.
+    """
+    conn = _get_db()
+    try:
+        cur = conn.execute(
+            """INSERT INTO audio_assets
+               (id, user_id, class_id, material_id, section, voice, status)
+               VALUES (?, ?, ?, ?, ?, ?, 'pending')
+               ON CONFLICT(user_id, class_id, material_id, section, voice)
+               DO NOTHING""",
+            (
+                f"a-{uuid.uuid4().hex[:8]}",
+                user_id.lower(),
+                class_id,
+                material_id,
+                section,
+                voice,
+            ),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def reset_audio_asset(asset_id: str) -> bool:
+    """failed(또는 파일이 사라진 ready) 에셋을 pending으로 되돌려 재생성을 선점합니다."""
+    conn = _get_db()
+    try:
+        cur = conn.execute(
+            """UPDATE audio_assets SET status = 'pending', duration = 0, file_path = ''
+               WHERE id = ? AND status IN ('failed', 'ready')""",
+            (asset_id,),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def update_audio_asset(asset_id: str, **fields):
+    """오디오 에셋을 부분 업데이트합니다 (status, duration, file_path)."""
+    if not fields:
+        return
+    set_clauses = ", ".join(f"{k} = ?" for k in fields)
+    conn = _get_db()
+    try:
+        conn.execute(
+            f"UPDATE audio_assets SET {set_clauses} WHERE id = ?",
+            (*fields.values(), asset_id),
         )
         conn.commit()
     finally:

@@ -5,6 +5,7 @@
 
 import json
 import os
+import re
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -41,16 +42,23 @@ from ..auth import (
 )
 from ..service import (
     finish_indexing,
+    generate_audio_asset,
     generate_example_messages,
+    get_audio_file,
+    get_audio_manifest,
+    get_audio_sections,
+    get_audio_status,
     get_material_index,
     get_material_indexing_status,
     get_materials,
     new_thread_id,
     parse_schedule_date,
     regenerate_material_index,
+    request_audio,
     stream_chat,
     upload_material,
 )
+from ..tts import DEFAULT_VOICE, VOICES
 from .slack import slack_handler
 
 load_dotenv()
@@ -272,6 +280,173 @@ async def material_index_regenerate(
             detail="인덱스 생성에 실패했습니다. 잠시 후 다시 시도하거나 자료를 다시 업로드해 주세요.",
         )
     return {"status": "ready", "content": content}
+
+
+# --- 원문 낭독 (Read-Aloud) Endpoints ---
+
+
+def _check_class_owner(class_id: str, user: dict):
+    cls = get_class(class_id)
+    if not cls or cls["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="클래스를 찾을 수 없습니다.")
+
+
+def _check_voice(voice: str):
+    if voice not in VOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원하지 않는 음성입니다. ({', '.join(VOICES)})",
+        )
+
+
+class AudioRequest(BaseModel):
+    section: str
+    voice: str = DEFAULT_VOICE
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/audio/sections")
+async def material_audio_sections(
+    class_id: str, material_name: str, user: dict = Depends(get_current_user)
+):
+    """자료의 낭독 섹션(페이지 그룹) 목록을 반환합니다."""
+    _check_class_owner(class_id, user)
+    sections = get_audio_sections(user["email"], class_id, material_name)
+    if sections is None:
+        raise HTTPException(status_code=404, detail="PDF 원본을 찾을 수 없습니다.")
+    return {"sections": sections, "voices": VOICES, "default_voice": DEFAULT_VOICE}
+
+
+@app.post("/api/classes/{class_id}/materials/{material_name}/audio")
+async def material_audio_request(
+    class_id: str,
+    material_name: str,
+    body: AudioRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """섹션 오디오 생성을 요청합니다. 캐시가 있으면 즉시 ready를 반환합니다."""
+    _check_class_owner(class_id, user)
+    _check_voice(body.voice)
+    sections = get_audio_sections(user["email"], class_id, material_name)
+    if sections is None:
+        raise HTTPException(status_code=404, detail="PDF 원본을 찾을 수 없습니다.")
+    if body.section not in {s["section"] for s in sections}:
+        raise HTTPException(status_code=400, detail="유효하지 않은 섹션입니다.")
+
+    result = request_audio(
+        user["email"], class_id, material_name, body.section, body.voice
+    )
+    if result.pop("_start", False):
+        background_tasks.add_task(
+            generate_audio_asset,
+            user["email"],
+            class_id,
+            material_name,
+            body.section,
+            body.voice,
+        )
+    return result
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/audio/status")
+async def material_audio_status(
+    class_id: str,
+    material_name: str,
+    section: str,
+    voice: str = DEFAULT_VOICE,
+    user: dict = Depends(get_current_user),
+):
+    """오디오 생성 상태를 폴링합니다."""
+    _check_class_owner(class_id, user)
+    return get_audio_status(user["email"], class_id, material_name, section, voice)
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/audio/manifest")
+async def material_audio_manifest(
+    class_id: str,
+    material_name: str,
+    section: str,
+    voice: str = DEFAULT_VOICE,
+    user: dict = Depends(get_current_user),
+):
+    """하이라이트 동기화용 매니페스트 JSON을 반환합니다."""
+    _check_class_owner(class_id, user)
+    manifest = get_audio_manifest(user["email"], class_id, material_name, section, voice)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="매니페스트가 아직 없습니다.")
+    return manifest
+
+
+_AUDIO_STREAM_CHUNK = 256 * 1024
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/audio/file")
+async def material_audio_file(
+    class_id: str,
+    material_name: str,
+    request: Request,
+    section: str,
+    voice: str = DEFAULT_VOICE,
+    token: str = "",
+):
+    """오디오 파일을 스트리밍합니다 (HTTP Range 지원 — 모바일 탐색·이어듣기용).
+
+    <audio> 태그는 Authorization 헤더를 붙일 수 없으므로 token 쿼리 파라미터도 허용.
+    """
+    auth_header = request.headers.get("authorization", "")
+    raw_token = auth_header.removeprefix("Bearer ").strip() or token
+    email = verify_token(raw_token) if raw_token else None
+    user = get_user(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+    _check_class_owner(class_id, user)
+
+    found = get_audio_file(user["email"], class_id, material_name, section, voice)
+    if not found:
+        raise HTTPException(status_code=404, detail="오디오가 아직 준비되지 않았습니다.")
+    path, media_type = found
+    file_size = path.stat().st_size
+
+    # Range 헤더 파싱 (bytes=start-end)
+    start, end = 0, file_size - 1
+    range_header = request.headers.get("range", "")
+    is_partial = False
+    m = re.match(r"bytes=(\d*)-(\d*)$", range_header)
+    if m and (m.group(1) or m.group(2)):
+        is_partial = True
+        if m.group(1):
+            start = int(m.group(1))
+            if m.group(2):
+                end = min(int(m.group(2)), file_size - 1)
+        else:
+            # suffix range: 마지막 N바이트
+            start = max(file_size - int(m.group(2)), 0)
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="요청 범위가 파일 크기를 벗어났습니다.")
+
+    def iter_range():
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = end - start + 1
+            while remaining > 0:
+                data = f.read(min(_AUDIO_STREAM_CHUNK, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(end - start + 1),
+    }
+    if is_partial:
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    return StreamingResponse(
+        iter_range(),
+        status_code=206 if is_partial else 200,
+        media_type=media_type,
+        headers=headers,
+    )
 
 
 # --- Chat Endpoints ---
