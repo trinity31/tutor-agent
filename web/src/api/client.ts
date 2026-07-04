@@ -144,6 +144,7 @@ export interface AudioChunk {
   start: number;
   end: number;
   sentences: string[];
+  page?: number; // PDF 원본 페이지 (1-based) — 구버전 매니페스트에는 없음
 }
 
 export interface AudioManifest {
@@ -210,6 +211,12 @@ export function audioFileUrl(
   // <audio> 태그는 Authorization 헤더를 붙일 수 없어 token 쿼리 파라미터 사용
   const token = getToken() ?? '';
   return `${API_BASE}${audioBase(classId, materialName)}/file?section=${encodeURIComponent(section)}&voice=${voice}&token=${encodeURIComponent(token)}`;
+}
+
+export function pdfFileUrl(classId: string, materialName: string): string {
+  // pdf.js는 Authorization 헤더를 붙일 수 없어 token 쿼리 파라미터 사용
+  const token = getToken() ?? '';
+  return `${API_BASE}/classes/${classId}/materials/${encodeURIComponent(materialName)}/pdf?token=${encodeURIComponent(token)}`;
 }
 
 export interface SSEEvent {

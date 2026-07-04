@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { pdfFileUrl } from '../../api/client';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
+
+// pdf.js 번들이 커서 PDF 뷰를 열 때만 로드
+const PdfPageView = lazy(() => import('./PdfPageView'));
+
+const VIEW_KEY = 'tutor-audio-view';
 
 interface Props {
   classId: string;
@@ -37,6 +43,15 @@ export default function AudioReader({ classId, materialName }: Props) {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [viewMode, setViewMode] = useState<'text' | 'pdf'>(
+    () => (localStorage.getItem(VIEW_KEY) === 'pdf' ? 'pdf' : 'text'),
+  );
+
+  const toggleView = () => {
+    const next = viewMode === 'pdf' ? 'text' : 'pdf';
+    localStorage.setItem(VIEW_KEY, next);
+    setViewMode(next);
+  };
 
   useEffect(() => {
     init(classId, materialName);
@@ -123,6 +138,20 @@ export default function AudioReader({ classId, materialName }: Props) {
 
   const generating = status === 'loading' || status === 'pending' || status === 'generating';
 
+  // PDF 뷰: 재생 위치의 페이지 (구버전 매니페스트는 페이지 정보 없음)
+  const hasPages = manifest?.chunks.some((c) => c.page != null) ?? false;
+  const playbackPage =
+    manifest?.chunks[Math.max(currentChunk, 0)]?.page ?? manifest?.chunks[0]?.page ?? 1;
+
+  // "이 페이지부터 듣기" — 해당 페이지의 첫 청크로 시크
+  const listenFromPage = (page: number) => {
+    if (!manifest) return;
+    const target =
+      manifest.chunks.find((c) => c.page === page) ??
+      manifest.chunks.find((c) => (c.page ?? 0) > page);
+    if (target) seekTo(target.start);
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* 섹션·음성 선택 */}
@@ -152,9 +181,29 @@ export default function AudioReader({ classId, materialName }: Props) {
             </option>
           ))}
         </select>
+        <button
+          onClick={toggleView}
+          className="shrink-0 rounded-md border border-warm-200 bg-white px-2 py-1 text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors"
+          title={viewMode === 'pdf' ? '낭독 텍스트 보기' : 'PDF 원본 보기'}
+        >
+          {viewMode === 'pdf' ? '📝 텍스트' : '📄 원본'}
+        </button>
       </div>
 
-      {/* 본문 (청크 하이라이트 + 문장 클릭 시크) */}
+      {/* 본문: PDF 원본 (페이지 자동 넘김) 또는 낭독 텍스트 (청크 하이라이트) */}
+      {status === 'ready' && viewMode === 'pdf' ? (
+        <div className="flex-1 overflow-hidden">
+          <Suspense
+            fallback={<p className="p-4 text-sm text-warm-400">PDF 뷰어를 불러오는 중...</p>}
+          >
+            <PdfPageView
+              fileUrl={pdfFileUrl(classId, materialName)}
+              playbackPage={playbackPage}
+              onListenFromPage={hasPages ? listenFromPage : undefined}
+            />
+          </Suspense>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {generating && (
           <div className="space-y-2">
@@ -207,6 +256,7 @@ export default function AudioReader({ classId, materialName }: Props) {
           </div>
         )}
       </div>
+      )}
 
       {/* 플레이어 */}
       {status === 'ready' && fileUrl && (

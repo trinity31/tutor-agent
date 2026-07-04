@@ -37,7 +37,7 @@ from .file_search import (
     wait_for_indexing,
     GEMINI_MODEL,
 )
-from .narration import build_narration_chunks
+from .narration import build_narration_chunks_paged
 from .tts import GeminiTTSEngine, PCM_RATE, pcm_duration
 
 # --- 그래프 싱글턴 ---
@@ -497,17 +497,18 @@ def _dominant_font_size(reader) -> float:
     return sizes.most_common(1)[0][0] if sizes else 0.0
 
 
-def _extract_body_text(reader, start: int, end: int) -> str:
-    """섹션 페이지(1-based, 양끝 포함)의 본문 텍스트를 추출합니다.
+def _extract_body_pages(reader, start: int, end: int) -> list[tuple[int, str]]:
+    """섹션 페이지(1-based, 양끝 포함)의 본문 텍스트를 페이지별로 추출합니다.
 
     각주·푸터·쪽번호·URL 줄은 본문보다 작은 폰트로 조판되므로
     본문 폰트 크기 95% 미만인 텍스트를 걸러 낭독에서 제외한다.
+    페이지 번호는 PDF 뷰의 재생 위치 동기화(자동 넘김)에 쓰인다.
     """
     threshold = _dominant_font_size(reader) * _BODY_FONT_RATIO
-    plain_parts: list[str] = []
-    body_parts: list[str] = []
+    plain_pages: list[tuple[int, str]] = []
+    body_pages: list[tuple[int, str]] = []
 
-    for page in reader.pages[start - 1 : end]:
+    for page_no, page in enumerate(reader.pages[start - 1 : end], start=start):
         chunks: list[str] = []
 
         def visitor(text, cm, tm, font_dict, font_size):
@@ -517,17 +518,22 @@ def _extract_body_text(reader, start: int, end: int) -> str:
                 chunks.append(text)
 
         try:
-            plain_parts.append(page.extract_text(visitor_text=visitor) or "")
+            plain_pages.append((page_no, page.extract_text(visitor_text=visitor) or ""))
         except Exception:
-            plain_parts.append(page.extract_text() or "")
-        body_parts.append("".join(chunks))
+            plain_pages.append((page_no, page.extract_text() or ""))
+        body_pages.append((page_no, "".join(chunks)))
 
-    body = "\n".join(body_parts)
-    plain = "\n".join(plain_parts)
+    body_len = sum(len(t.strip()) for _, t in body_pages)
+    plain_len = sum(len(t.strip()) for _, t in plain_pages)
     # 과도하게 걸러진 경우(특이한 조판) 원본 추출로 폴백
-    if len(body.strip()) < len(plain.strip()) * 0.3:
-        return plain
-    return body
+    if body_len < plain_len * 0.3:
+        return plain_pages
+    return body_pages
+
+
+def _extract_body_text(reader, start: int, end: int) -> str:
+    """섹션 본문 텍스트를 하나의 문자열로 반환합니다 (페이지 정보 불필요 시)."""
+    return "\n".join(t for _, t in _extract_body_pages(reader, start, end))
 
 
 def _pcm_to_wav(pcm: bytes, path: Path, rate: int = PCM_RATE) -> None:
@@ -590,27 +596,30 @@ def generate_audio_asset(
 
         reader = PdfReader(str(pdf_path))
         start, end = pages
-        raw_text = _extract_body_text(reader, start, end)
-        chunks = build_narration_chunks(raw_text)
+        chunks = build_narration_chunks_paged(_extract_body_pages(reader, start, end))
         if not chunks:
             return _fail("낭독할 문장이 없음 (이미지 기반 PDF일 수 있음)")
 
         # 청크별 TTS 호출 (제한된 동시성)
         with ThreadPoolExecutor(max_workers=_TTS_CONCURRENCY) as pool:
             pcms = list(
-                pool.map(lambda c: _tts_engine.synthesize(" ".join(c), voice), chunks)
+                pool.map(
+                    lambda c: _tts_engine.synthesize(" ".join(c["sentences"]), voice),
+                    chunks,
+                )
             )
 
-        # 병합 + 청크별 정확한 재생 시간 계산 (하이라이트 동기화 근거)
+        # 병합 + 청크별 정확한 재생 시간 계산 (하이라이트·페이지 동기화 근거)
         manifest_chunks = []
         cursor = 0.0
-        for sentences, pcm in zip(chunks, pcms):
+        for chunk, pcm in zip(chunks, pcms):
             duration = pcm_duration(pcm)
             manifest_chunks.append({
-                "text": " ".join(sentences),
+                "text": " ".join(chunk["sentences"]),
                 "start": round(cursor, 2),
                 "end": round(cursor + duration, 2),
-                "sentences": sentences,
+                "sentences": chunk["sentences"],
+                "page": chunk["page"],
             })
             cursor += duration
 

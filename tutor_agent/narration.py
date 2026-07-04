@@ -159,21 +159,21 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def group_chunks(
-    sentences: list[str],
-    max_sentences: int = MAX_CHUNK_SENTENCES,
-    max_chars: int = MAX_CHUNK_CHARS,
-) -> list[list[str]]:
-    """문장 리스트를 TTS 1회 호출 단위 청크로 그룹핑합니다.
+def _group_sentence_pages(
+    sent_pages: list[tuple[str, int]],
+    max_sentences: int,
+    max_chars: int,
+) -> list[list[tuple[str, int]]]:
+    """(문장, 페이지) 목록을 TTS 1회 호출 단위 청크로 그룹핑합니다.
 
     번호 제목("3) 명과 풍수의 관계.")은 앞 문단 끝에 붙지 않도록
     항상 새 청크의 시작이 됩니다.
     """
-    chunks: list[list[str]] = []
-    current: list[str] = []
+    chunks: list[list[tuple[str, int]]] = []
+    current: list[tuple[str, int]] = []
     current_len = 0
 
-    for sent in sentences:
+    for sent, page in sent_pages:
         if current and (
             _NUM_HEADING_SENT_RE.match(sent)
             or len(current) >= max_sentences
@@ -182,7 +182,7 @@ def group_chunks(
             chunks.append(current)
             current = []
             current_len = 0
-        current.append(sent)
+        current.append((sent, page))
         current_len += len(sent)
 
     if current:
@@ -190,6 +190,42 @@ def group_chunks(
     return chunks
 
 
+def group_chunks(
+    sentences: list[str],
+    max_sentences: int = MAX_CHUNK_SENTENCES,
+    max_chars: int = MAX_CHUNK_CHARS,
+) -> list[list[str]]:
+    """문장 리스트를 TTS 1회 호출 단위 청크로 그룹핑합니다."""
+    grouped = _group_sentence_pages(
+        [(s, 0) for s in sentences], max_sentences, max_chars
+    )
+    return [[s for s, _ in chunk] for chunk in grouped]
+
+
 def build_narration_chunks(raw_text: str) -> list[list[str]]:
     """PDF 원문 텍스트에서 낭독 청크(문장 리스트의 리스트)를 생성합니다."""
     return group_chunks(split_sentences(clean_text(raw_text)))
+
+
+def build_narration_chunks_paged(
+    page_texts: list[tuple[int, str]],
+) -> list[dict]:
+    """페이지별 원문에서 페이지 정보가 붙은 낭독 청크를 생성합니다.
+
+    Args:
+        page_texts: (페이지 번호(1-based), 페이지 텍스트) 목록
+
+    Returns:
+        [{"sentences": [...], "page": 첫 문장의 페이지 번호}] — PDF 뷰의
+        재생 위치 페이지 동기화(자동 넘김)의 근거가 된다.
+    """
+    sent_pages: list[tuple[str, int]] = []
+    for page_no, text in page_texts:
+        for sent in split_sentences(clean_text(text)):
+            sent_pages.append((sent, page_no))
+
+    grouped = _group_sentence_pages(sent_pages, MAX_CHUNK_SENTENCES, MAX_CHUNK_CHARS)
+    return [
+        {"sentences": [s for s, _ in chunk], "page": chunk[0][1]}
+        for chunk in grouped
+    ]

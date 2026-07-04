@@ -2,6 +2,7 @@
 
 from tutor_agent.narration import (
     build_narration_chunks,
+    build_narration_chunks_paged,
     clean_text,
     group_chunks,
     split_sentences,
@@ -211,6 +212,37 @@ def test_청크_순서_보존():
     chunks = group_chunks(sentences)
     flat = [s for c in chunks for s in c]
     assert flat == sentences
+
+
+# --- 페이지 매핑 (PDF 뷰 자동 넘김 근거) ---
+
+
+def test_페이지_청크에_시작_페이지_기록():
+    pages = [
+        (3, "삼 페이지의 첫 문장입니다. 삼 페이지의 둘째 문장입니다."),
+        (4, "사 페이지의 문장입니다."),
+    ]
+    chunks = build_narration_chunks_paged(pages)
+    assert chunks[0]["page"] == 3
+    assert chunks[0]["sentences"][0] == "삼 페이지의 첫 문장입니다."
+    # 모든 문장이 순서대로 보존
+    flat = [s for c in chunks for s in c["sentences"]]
+    assert flat == [
+        "삼 페이지의 첫 문장입니다.",
+        "삼 페이지의 둘째 문장입니다.",
+        "사 페이지의 문장입니다.",
+    ]
+
+
+def test_페이지_경계를_넘는_청크는_첫_문장_페이지():
+    # 문장 5개 → 4+1로 청크 분할, 페이지 경계와 무관하게 첫 문장의 페이지 기록
+    pages = [
+        (1, "일 페이지 첫 문장입니다. 일 페이지 둘째 문장입니다. 일 페이지 셋째 문장입니다."),
+        (2, "이 페이지 첫 문장입니다. 이 페이지 둘째 문장입니다."),
+    ]
+    chunks = build_narration_chunks_paged(pages)
+    assert [c["page"] for c in chunks] == [1, 2]
+    assert [len(c["sentences"]) for c in chunks] == [4, 1]
 
 
 # --- 통합 ---

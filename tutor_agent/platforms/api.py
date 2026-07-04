@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -50,6 +50,7 @@ from ..service import (
     get_audio_status,
     get_material_index,
     get_material_indexing_status,
+    get_material_path,
     get_materials,
     new_thread_id,
     parse_schedule_date,
@@ -447,6 +448,31 @@ async def material_audio_file(
         media_type=media_type,
         headers=headers,
     )
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/pdf")
+async def material_pdf(
+    class_id: str,
+    material_name: str,
+    request: Request,
+    token: str = "",
+):
+    """PDF 원본을 반환합니다 (낭독 화면의 원본 보기용).
+
+    pdf.js 뷰어는 Authorization 헤더를 붙일 수 없으므로 token 쿼리도 허용.
+    """
+    auth_header = request.headers.get("authorization", "")
+    raw_token = auth_header.removeprefix("Bearer ").strip() or token
+    email = verify_token(raw_token) if raw_token else None
+    user = get_user(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+    _check_class_owner(class_id, user)
+
+    path = get_material_path(user["email"], class_id, material_name)
+    if not path:
+        raise HTTPException(status_code=404, detail="PDF 원본을 찾을 수 없습니다.")
+    return FileResponse(path, media_type="application/pdf")
 
 
 # --- Chat Endpoints ---
