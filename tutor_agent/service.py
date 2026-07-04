@@ -465,6 +465,71 @@ def get_audio_manifest(
         return None
 
 
+# 본문 폰트 크기의 95% 미만 텍스트(각주·푸터·쪽번호)는 낭독에서 제외
+_BODY_FONT_RATIO = 0.95
+
+
+def _effective_font_size(tm, font_size) -> float:
+    """텍스트 렌더링 행렬을 반영한 실제 폰트 크기를 계산합니다."""
+    if not font_size:
+        return 0.0
+    return abs(font_size * tm[3]) if tm and tm[3] else font_size
+
+
+def _dominant_font_size(reader) -> float:
+    """문서 본문 폰트 크기(글자 수 기준 최빈값)를 계산합니다."""
+    from collections import Counter
+
+    sizes: Counter = Counter()
+
+    def visitor(text, cm, tm, font_dict, font_size):
+        t = text.strip()
+        if t:
+            eff = _effective_font_size(tm, font_size)
+            if eff:
+                sizes[round(eff, 1)] += len(t)
+
+    for page in reader.pages:
+        try:
+            page.extract_text(visitor_text=visitor)
+        except Exception:
+            continue
+    return sizes.most_common(1)[0][0] if sizes else 0.0
+
+
+def _extract_body_text(reader, start: int, end: int) -> str:
+    """섹션 페이지(1-based, 양끝 포함)의 본문 텍스트를 추출합니다.
+
+    각주·푸터·쪽번호·URL 줄은 본문보다 작은 폰트로 조판되므로
+    본문 폰트 크기 95% 미만인 텍스트를 걸러 낭독에서 제외한다.
+    """
+    threshold = _dominant_font_size(reader) * _BODY_FONT_RATIO
+    plain_parts: list[str] = []
+    body_parts: list[str] = []
+
+    for page in reader.pages[start - 1 : end]:
+        chunks: list[str] = []
+
+        def visitor(text, cm, tm, font_dict, font_size):
+            if text and (
+                not threshold or _effective_font_size(tm, font_size) >= threshold
+            ):
+                chunks.append(text)
+
+        try:
+            plain_parts.append(page.extract_text(visitor_text=visitor) or "")
+        except Exception:
+            plain_parts.append(page.extract_text() or "")
+        body_parts.append("".join(chunks))
+
+    body = "\n".join(body_parts)
+    plain = "\n".join(plain_parts)
+    # 과도하게 걸러진 경우(특이한 조판) 원본 추출로 폴백
+    if len(body.strip()) < len(plain.strip()) * 0.3:
+        return plain
+    return body
+
+
 def _pcm_to_wav(pcm: bytes, path: Path, rate: int = PCM_RATE) -> None:
     """PCM(s16le mono)에 WAV 헤더를 붙여 저장합니다 (tts-demo 참조)."""
     with open(path, "wb") as f:
@@ -525,9 +590,7 @@ def generate_audio_asset(
 
         reader = PdfReader(str(pdf_path))
         start, end = pages
-        raw_text = "\n".join(
-            page.extract_text() or "" for page in reader.pages[start - 1 : end]
-        )
+        raw_text = _extract_body_text(reader, start, end)
         chunks = build_narration_chunks(raw_text)
         if not chunks:
             return _fail("낭독할 문장이 없음 (이미지 기반 PDF일 수 있음)")

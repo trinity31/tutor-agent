@@ -38,6 +38,9 @@ _STRAY_NUM_DOT_RE = re.compile(r"(?<=[가-힣])\d{1,3}\.(?=\s|$)")
 # 표 구분자 '|'는 표 필터링(_is_table_line)에 필요하므로 제외.
 _ORPHAN_PUNCT_RE = re.compile(r"(?:(?<=\s)|^)(?:[^\w\s|]+(?:\s+|$))+")
 
+# URL은 낭독하지 않음 (푸터·참고문헌 링크)
+_URL_RE = re.compile(r"(?:https?://|www\.)\S+")
+
 # 문장 종결(., !, ?, 다.) 뒤에서 분리
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 
@@ -51,6 +54,7 @@ def clean_text(text: str) -> str:
     text = _HANJA_PAREN_RE.sub(r"\1", text)
     text = _HANJA_WORD_RE.sub(" ", text)
     text = _BROKEN_GLYPH_RE.sub("", text)
+    text = _URL_RE.sub(" ", text)
     text = _MIDDLE_DOT_RE.sub(", ", text)
     text = _BULLET_RE.sub(" ", text)
     text = _QUOTE_RE.sub("", text)

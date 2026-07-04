@@ -106,6 +106,11 @@ def test_정상_순서_목록_번호는_보존():
     assert clean_text("연도 표기 (1983) 보존") == "연도 표기 (1983) 보존"
 
 
+def test_URL_제거():
+    assert clean_text("자세한 내용은 www.wdu.ac.kr 참고") == "자세한 내용은 참고"
+    assert clean_text("출처: https://example.com/a?b=1 입니다") == "출처: 입니다"
+
+
 # --- 3. 문장 분리 + 목차·표 필터링 ---
 
 
