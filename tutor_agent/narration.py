@@ -9,14 +9,28 @@ tts-demo에서 검증된 규칙을 순수 함수로 구현합니다:
 
 import re
 
+# 한자: 기본 영역(U+4E00-9FFF) + 확장 A(U+3400-4DBF) + 호환 한자(U+F900-FAFF)
+# — 호환 영역은 옛 문헌 PDF에서 宅(U+FA04)·李(U+F9E1)처럼 실제로 등장한다
+_HANJA = "\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
 # 한자 병기: 한글(한자) → 한글
-_HANJA_PAREN_RE = re.compile(r"([가-힣]+)\(([一-鿿]+)\)")
+_HANJA_PAREN_RE = re.compile(rf"([가-힣]+)\(([{_HANJA}]+)\)")
 # 독립 한자 어절: 한자(와 구두점)로만 이루어진 어절
-_HANJA_WORD_RE = re.compile(r"(?<![가-힣A-Za-z0-9])[一-鿿]+(?![가-힣A-Za-z0-9])")
+_HANJA_WORD_RE = re.compile(rf"(?<![가-힣A-Za-z0-9])[{_HANJA}]+(?![가-힣A-Za-z0-9])")
 # 제어문자(탭·개행 제외), 대체문자, 사용자 영역(깨진 글리프)
 _BROKEN_GLYPH_RE = re.compile("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\ufffd\\ue000-\\uf8ff]")
 # 가운뎃점 계열 특수 구두점 → 쉼표로 (낭독 시 자연스러운 끊어읽기)
-_MIDDLE_DOT_RE = re.compile(r"\s*[‧∙・·•]\s*")
+_MIDDLE_DOT_RE = re.compile(r"\s*[‧∙・·•ㆍ]\s*")
+# 단어에 붙어 추출되는 불릿·박스 기호 → 공백 (슬라이드 글머리표)
+_BULLET_RE = re.compile(r"[￭￮■□▪▫◆◇●○▶▷◀◁]")
+# 인용부호 제거: 낭독에 불필요하고, 슬라이드형 PDF에서는 본문과 분리되어
+# 추출되는 주범. 영어 축약형(don't)의 아포스트로피만 보존.
+_QUOTE_RE = re.compile(r"[\"“”‘’]|(?<![A-Za-z])'|'(?![A-Za-z])")
+# 고아 구두점 어절: 구두점·기호로만 이루어진 어절의 연속.
+# 슬라이드형 PDF는 따옴표·쉼표가 본문과 분리된 위치에 저장되어
+# 추출 시 "풍수' ' ' '" 처럼 내용을 잃은 구두점만 남는다.
+# 표 구분자 '|'는 표 필터링(_is_table_line)에 필요하므로 제외.
+_ORPHAN_PUNCT_RE = re.compile(r"(?:(?<=\s)|^)(?:[^\w\s|]+(?:\s+|$))+")
+
 # 문장 종결(., !, ?, 다.) 뒤에서 분리
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 
@@ -31,8 +45,23 @@ def clean_text(text: str) -> str:
     text = _HANJA_WORD_RE.sub(" ", text)
     text = _BROKEN_GLYPH_RE.sub("", text)
     text = _MIDDLE_DOT_RE.sub(", ", text)
+    text = _BULLET_RE.sub(" ", text)
+    text = _QUOTE_RE.sub("", text)
     # 빈 괄호(한자만 들어있던 괄호의 잔여물) 제거
     text = re.sub(r"\(\s*\)", "", text)
+    # 고아 구두점 어절 정리 (줄 단위 — 줄 구조 보존):
+    # 문장 종결부호가 섞여 있으면 마침표로 축약해 문장 경계를 보존하고,
+    # 아니면 통째로 제거. 이어서 앞 어절과 분리된 문장부호를 붙인다
+    # ("등장한다 ." → "등장한다.")
+    def _tidy_line(line: str) -> str:
+        line = _ORPHAN_PUNCT_RE.sub(
+            lambda m: ". " if re.search(r"[.!?…]", m.group()) else "", line
+        )
+        # 앞 어절과 분리된 문장부호를 붙이고, "쉼표+종결부호"는 종결부호로 축약
+        line = re.sub(r"(?<=[\w가-힣)])\s+([.,!?…])", r"\1", line)
+        return re.sub(r",\s*([.!?…])", r"\1", line)
+
+    text = "\n".join(_tidy_line(line) for line in text.split("\n"))
     # 줄 단위 구조는 유지하고 줄 안의 공백만 정규화
     lines = [re.sub(r"[ \t 　]+", " ", line).strip() for line in text.split("\n")]
     return "\n".join(lines)

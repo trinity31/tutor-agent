@@ -28,6 +28,17 @@ def test_괄호_안_한글은_보존():
     assert clean_text(text) == text
 
 
+def test_호환_한자_영역_제거():
+    # 宅(U+FA04), 李(U+F9E1) — CJK 호환 한자 영역
+    assert clean_text("복택 宅 3) 점에 의한") == "복택 3) 점에 의한"
+    assert clean_text("李 북대 대학원") == "북대 대학원"
+
+
+def test_불릿_기호_제거():
+    assert clean_text("풍수의 명칭￭ 풍수 라는") == "풍수의 명칭 풍수 라는"
+    assert clean_text("ㆍ 풍수지리설의 특징") == "풍수지리설의 특징"
+
+
 # --- 2. 글리프·구두점·공백 정리 ---
 
 
@@ -41,6 +52,39 @@ def test_가운뎃점을_쉼표로():
 
 def test_공백_정규화():
     assert clean_text("음양과   오행의 \t 원리") == "음양과 오행의 원리"
+
+
+# --- 2-1. 고아 구두점 정리 (슬라이드형 PDF 추출 잔여물) ---
+
+
+def test_고아_따옴표_어절_제거():
+    # 따옴표가 본문과 분리되어 추출된 경우 (내용을 잃은 구두점)
+    assert clean_text("풍수지리 와 풍수' ' ' '") == "풍수지리 와 풍수"
+
+
+def test_고아_쉼표_연속_제거():
+    assert clean_text("를 의미한다, , , , .") == "를 의미한다."
+
+
+def test_고아_구두점_문장_경계_보존():
+    # 종결부호가 섞인 고아 구두점은 마침표로 축약 → 문장 분리 유지
+    text = "문헌에 등장한다, . 복택 점에 의한 길흉판단"
+    assert clean_text(text) == "문헌에 등장한다. 복택 점에 의한 길흉판단"
+
+
+def test_고아_구두점_문장_중간_제거():
+    text = "풍수 에 지리 라는 단어가 붙은 것, ' ' ' ' 으로 판단된다."
+    assert clean_text(text) == "풍수 에 지리 라는 단어가 붙은 것, 으로 판단된다."
+
+
+def test_인용부호_제거_영어_아포스트로피_보존():
+    # 인용부호는 낭독에 불필요하므로 제거 (내용은 보존)
+    assert clean_text("'인용문'은 내용만 유지") == "인용문은 내용만 유지"
+    assert clean_text("It doesn't matter") == "It doesn't matter"
+
+
+def test_분리된_문장부호_붙이기():
+    assert clean_text("길흉을 판단한다 .") == "길흉을 판단한다."
 
 
 # --- 3. 문장 분리 + 목차·표 필터링 ---
