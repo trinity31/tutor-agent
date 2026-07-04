@@ -50,6 +50,9 @@ _URL_RE = re.compile(r"(?:https?://|www\.)\S+")
 # 문장 종결(., !, ?, 다.) 뒤에서 분리
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 
+# 번호로 시작하는 제목·항목 문장 — 청크(문단)의 시작이 되어야 한다
+_NUM_HEADING_SENT_RE = re.compile(r"^\d{1,3}[).]\s*\S")
+
 # 청크 그룹핑 기본값: 청크당 2~4문장, ~500자 (TTS 1회 호출 단위)
 MAX_CHUNK_SENTENCES = 4
 MAX_CHUNK_CHARS = 500
@@ -67,17 +70,26 @@ def clean_text(text: str) -> str:
     # 빈 괄호(한자만 들어있던 괄호의 잔여물) 제거
     text = re.sub(r"\(\s*\)", "", text)
     # 제목 줄 처리: 줄 끝으로 밀린 번호를 앞으로 복원하고, 제목을
-    # 마침표로 닫아 독립 문장으로 유지 (구조가 낭독·하이라이트에 드러남)
-    def _fix_heading(line: str) -> str:
+    # 마침표로 닫아 독립 문장으로 유지 (구조가 낭독·하이라이트에 드러남).
+    # 제목은 시각적으로 앞 문단과 분리되므로, 직전 줄이 종결부호 없이
+    # 끝났더라도 경계를 만들어 제목이 앞 줄을 빨아들이지 않게 한다.
+    fixed_lines: list[str] = []
+    for line in text.split("\n"):
         stripped = line.strip()
         m = _DISLOCATED_HEADING_RE.match(stripped)
         if m:
-            return f"{m.group(2)} {m.group(1).strip()}."
-        if _LEADING_NUM_HEADING_RE.match(stripped):
-            return f"{stripped}."
-        return line
-
-    text = "\n".join(_fix_heading(line) for line in text.split("\n"))
+            heading = f"{m.group(2)} {m.group(1).strip()}."
+        elif _LEADING_NUM_HEADING_RE.match(stripped):
+            heading = f"{stripped}."
+        else:
+            fixed_lines.append(line)
+            continue
+        if fixed_lines and fixed_lines[-1].strip() and not re.search(
+            r"[.!?…]\s*$", fixed_lines[-1]
+        ):
+            fixed_lines[-1] = fixed_lines[-1].rstrip() + "."
+        fixed_lines.append(heading)
+    text = "\n".join(fixed_lines)
     # 문장 중간 단어 끝에 남은 각주 참조("않는다.2)", "전문가1)를") 제거
     text = _STRAY_NUM_PAREN_RE.sub("", text)
     text = _STRAY_NUM_DOT_RE.sub(".", text)
@@ -152,14 +164,20 @@ def group_chunks(
     max_sentences: int = MAX_CHUNK_SENTENCES,
     max_chars: int = MAX_CHUNK_CHARS,
 ) -> list[list[str]]:
-    """문장 리스트를 TTS 1회 호출 단위 청크로 그룹핑합니다."""
+    """문장 리스트를 TTS 1회 호출 단위 청크로 그룹핑합니다.
+
+    번호 제목("3) 명과 풍수의 관계.")은 앞 문단 끝에 붙지 않도록
+    항상 새 청크의 시작이 됩니다.
+    """
     chunks: list[list[str]] = []
     current: list[str] = []
     current_len = 0
 
     for sent in sentences:
         if current and (
-            len(current) >= max_sentences or current_len + len(sent) > max_chars
+            _NUM_HEADING_SENT_RE.match(sent)
+            or len(current) >= max_sentences
+            or current_len + len(sent) > max_chars
         ):
             chunks.append(current)
             current = []

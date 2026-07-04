@@ -131,6 +131,25 @@ def test_종결부호가_있는_줄은_복원하지_않음():
     assert clean_text("사용된 근거가 발견되지 않는다.2)") == "사용된 근거가 발견되지 않는다."
 
 
+def test_제목_직전_줄에_문장_경계_부여():
+    # 종결부호 없는 소제목이 뒤따르는 번호 제목과 병합되지 않아야 함
+    text = "설 론 학 의 구분\n명 과 풍수 의 관계3)"
+    assert clean_text(text) == "설 론 학 의 구분.\n3) 명 과 풍수 의 관계."
+
+
+def test_번호_제목은_새_청크_시작():
+    sentences = [
+        "풍수학 이 될 수 있는 것이다.",
+        "3) 명 과 풍수 의 관계.",
+        "인간의 운명은 결정된다는 것이 일반적 견해이다.",
+    ]
+    chunks = group_chunks(sentences)
+    assert chunks == [
+        ["풍수학 이 될 수 있는 것이다."],
+        ["3) 명 과 풍수 의 관계.", "인간의 운명은 결정된다는 것이 일반적 견해이다."],
+    ]
+
+
 def test_URL_제거():
     assert clean_text("자세한 내용은 www.wdu.ac.kr 참고") == "자세한 내용은 참고"
     assert clean_text("출처: https://example.com/a?b=1 입니다") == "출처: 입니다"
