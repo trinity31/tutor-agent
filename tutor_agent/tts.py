@@ -5,11 +5,12 @@ Google Cloud TTS/Speechify 등으로 전환할 수 있습니다.
 """
 
 import logging
+import time
 from typing import Protocol
 
 from google.genai import types
 
-from .file_search import get_client
+from .file_search import get_client, reset_client
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +45,34 @@ class TTSEngine(Protocol):
 class GeminiTTSEngine:
     """Gemini 2.5 Flash TTS 구현체."""
 
-    def synthesize(self, text: str, voice: str) -> bytes:
-        """텍스트를 PCM으로 합성합니다. 빈 응답 시 1회 자동 재시도합니다.
+    MAX_ATTEMPTS = 3
 
-        (gemini가 간헐적으로 빈 응답을 내는 것을 흡수 — stream_chat의 재시도 패턴 참조)
+    def synthesize(self, text: str, voice: str) -> bytes:
+        """텍스트를 PCM으로 합성합니다. 빈 응답·일시 오류 시 자동 재시도합니다.
+
+        (gemini가 간헐적으로 빈 응답을 내는 것을 흡수 — stream_chat의 재시도 패턴 참조.
+        병렬 호출 중 공유 클라이언트가 닫히는 오류는 클라이언트를 재생성해 복구한다.)
         """
-        pcm = self._call(text, voice)
-        if not pcm:
-            logger.warning("TTS 빈 응답 감지 — 자동 재시도합니다. (voice=%s)", voice)
-            pcm = self._call(text, voice)
-        if not pcm:
-            raise RuntimeError("TTS 합성에 실패했습니다 (빈 응답).")
-        return pcm
+        last_error: Exception | None = None
+        for attempt in range(self.MAX_ATTEMPTS):
+            if attempt:
+                time.sleep(2**attempt)  # 2s, 4s 백오프
+            try:
+                pcm = self._call(text, voice)
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "TTS 호출 실패 (%d/%d): %s", attempt + 1, self.MAX_ATTEMPTS, e
+                )
+                reset_client()
+                continue
+            if pcm:
+                return pcm
+            logger.warning(
+                "TTS 빈 응답 감지 — 재시도합니다. (%d/%d, voice=%s)",
+                attempt + 1, self.MAX_ATTEMPTS, voice,
+            )
+        raise RuntimeError(f"TTS 합성에 실패했습니다: {last_error or '빈 응답'}")
 
     def _call(self, text: str, voice: str) -> bytes:
         response = get_client().models.generate_content(

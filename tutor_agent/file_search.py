@@ -47,6 +47,12 @@ def get_client() -> genai.Client:
     return _client
 
 
+def reset_client():
+    """클라이언트 싱글턴을 초기화합니다 (닫힌 커넥션 복구용)."""
+    global _client
+    _client = None
+
+
 def _get_manifest_path(user_id: str = "", class_id: str = "") -> str:
     """사용자/클래스별 manifest 경로를 반환합니다."""
     if user_id and class_id:
