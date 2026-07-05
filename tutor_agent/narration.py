@@ -23,9 +23,9 @@ _MIDDLE_DOT_RE = re.compile(r"\s*[‧∙・·•ㆍ]\s*")
 # 단어에 붙어 추출되는 불릿·박스 기호 → 문장 경계 (슬라이드에서 제목·항목
 # 구분자로 쓰이므로, 마침표로 바꿔 제목이 본문과 한 문장으로 붙지 않게 한다)
 _BULLET_RE = re.compile(r"\s*[￭￮■□▪▫◆◇●○▶▷◀◁]\s*")
-# 인용부호 제거: 낭독에 불필요하고, 슬라이드형 PDF에서는 본문과 분리되어
-# 추출되는 주범. 영어 축약형(don't)의 아포스트로피만 보존.
-_QUOTE_RE = re.compile(r"[\"“”‘’]|(?<![A-Za-z])'|'(?![A-Za-z])")
+# 인용부호·꺾쇠 제거: 낭독에 불필요하고, 슬라이드형 PDF에서는 본문과
+# 분리되어 추출되는 주범. 영어 축약형(don't)의 아포스트로피만 보존.
+_QUOTE_RE = re.compile(r"[\"“”‘’<>〈〉《》「」『』【】]|(?<![A-Za-z])'|'(?![A-Za-z])")
 # 슬라이드형 PDF에서 제목 번호는 줄 끝으로 밀려 추출된다:
 # "3) 명과 풍수의 관계" → "명과 풍수의 관계3)". 문장 종결부호가 없는 줄이
 # 번호로 끝나면 제목으로 보고 번호를 앞으로 복원한다.
@@ -41,11 +41,17 @@ _STRAY_NUM_DOT_RE = re.compile(r"(?<=[가-힣])\d{1,3}\.(?=\s|$)")
 # 고아 구두점 어절: 구두점·기호로만 이루어진 어절의 연속.
 # 슬라이드형 PDF는 따옴표·쉼표가 본문과 분리된 위치에 저장되어
 # 추출 시 "풍수' ' ' '" 처럼 내용을 잃은 구두점만 남는다.
-# 표 구분자 '|'는 표 필터링(_is_table_line)에 필요하므로 제외.
-_ORPHAN_PUNCT_RE = re.compile(r"(?:(?<=\s)|^)(?:[^\w\s|]+(?:\s+|$))+")
+# 표 구분자 '|'는 표 필터링에, 불릿은 문장 경계 변환에 필요하므로 제외.
+_ORPHAN_PUNCT_RE = re.compile(r"(?:(?<=\s)|^)(?:[^\w\s|￭￮■□▪▫◆◇●○▶▷◀◁]+(?:\s+|$))+")
 
 # URL은 낭독하지 않음 (푸터·참고문헌 링크)
 _URL_RE = re.compile(r"(?:https?://|www\.)\S+")
+
+# 한국어 문장 종결 어미의 마지막 음절. 슬라이드형 PDF는 마침표를 문장
+# 위치가 아닌 줄 끝에 몰아 저장해 "그래서 사람. ."처럼 엉뚱한 단어에
+# 붙는데, 종결 어미가 아닌 글자 뒤의 마침표는 가짜로 보고 제거한다.
+_FINAL_SYLLABLES = set("다까요죠네라함임음됨것")
+_PERIOD_AFTER_HANGUL_RE = re.compile(r"([가-힣])((?:\s*\.)+)(?=\s|$)")
 
 # 문장 종결(., !, ?, 다.) 뒤에서 분리
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
@@ -58,6 +64,27 @@ MAX_CHUNK_SENTENCES = 4
 MAX_CHUNK_CHARS = 500
 
 
+def _tidy_line(line: str) -> str:
+    """고아 구두점 정리 + 가짜 마침표 제거 (줄 단위).
+
+    1. 구두점만 남은 어절 연속은 종결부호가 섞였으면 마침표로 축약, 아니면 제거
+    2. 앞 어절과 분리된 문장부호(쉼표·느낌표 등)는 앞 어절에 붙이고,
+       "쉼표+종결부호"는 종결부호로 축약
+    3. 마침표는 종결 어미(다/까/요/것 등) 뒤에서만 인정 — 그 외 글자 뒤의
+       마침표("그래서 사람. .")는 원래 위치를 잃은 가짜이므로 제거해
+       문장·오디오가 엉뚱한 곳에서 끊기지 않게 한다
+    """
+    line = _ORPHAN_PUNCT_RE.sub(
+        lambda m: ". " if re.search(r"[.!?…]", m.group()) else "", line
+    )
+    line = re.sub(r"(?<=[\w가-힣)])\s+([,!?…])", r"\1", line)
+    line = re.sub(r",\s*([.!?…])", r"\1", line)
+    return _PERIOD_AFTER_HANGUL_RE.sub(
+        lambda m: m.group(1) + "." if m.group(1) in _FINAL_SYLLABLES else m.group(1),
+        line,
+    )
+
+
 def clean_text(text: str) -> str:
     """PDF 추출 텍스트에서 낭독에 방해되는 요소를 제거합니다."""
     text = _HANJA_PAREN_RE.sub(r"\1", text)
@@ -65,10 +92,14 @@ def clean_text(text: str) -> str:
     text = _BROKEN_GLYPH_RE.sub("", text)
     text = _URL_RE.sub(" ", text)
     text = _MIDDLE_DOT_RE.sub(", ", text)
-    text = _BULLET_RE.sub(". ", text)
     text = _QUOTE_RE.sub("", text)
     # 빈 괄호(한자만 들어있던 괄호의 잔여물) 제거
     text = re.sub(r"\(\s*\)", "", text)
+    # 구두점 정정은 불릿·제목 처리보다 먼저 — 이후 단계가 의도적으로 붙이는
+    # 마침표(불릿 경계, 제목 종결)는 가짜 마침표 제거에 걸리지 않는다
+    text = "\n".join(_tidy_line(line) for line in text.split("\n"))
+    # 불릿은 슬라이드의 제목·항목 구분자 → 문장 경계로
+    text = _BULLET_RE.sub(". ", text)
     # 제목 줄 처리: 줄 끝으로 밀린 번호를 앞으로 복원하고, 제목을
     # 마침표로 닫아 독립 문장으로 유지 (구조가 낭독·하이라이트에 드러남).
     # 제목은 시각적으로 앞 문단과 분리되므로, 직전 줄이 종결부호 없이
@@ -93,19 +124,6 @@ def clean_text(text: str) -> str:
     # 문장 중간 단어 끝에 남은 각주 참조("않는다.2)", "전문가1)를") 제거
     text = _STRAY_NUM_PAREN_RE.sub("", text)
     text = _STRAY_NUM_DOT_RE.sub(".", text)
-    # 고아 구두점 어절 정리 (줄 단위 — 줄 구조 보존):
-    # 문장 종결부호가 섞여 있으면 마침표로 축약해 문장 경계를 보존하고,
-    # 아니면 통째로 제거. 이어서 앞 어절과 분리된 문장부호를 붙인다
-    # ("등장한다 ." → "등장한다.")
-    def _tidy_line(line: str) -> str:
-        line = _ORPHAN_PUNCT_RE.sub(
-            lambda m: ". " if re.search(r"[.!?…]", m.group()) else "", line
-        )
-        # 앞 어절과 분리된 문장부호를 붙이고, "쉼표+종결부호"는 종결부호로 축약
-        line = re.sub(r"(?<=[\w가-힣)])\s+([.,!?…])", r"\1", line)
-        return re.sub(r",\s*([.!?…])", r"\1", line)
-
-    text = "\n".join(_tidy_line(line) for line in text.split("\n"))
     # 줄 단위 구조는 유지하고 줄 안의 공백만 정규화
     lines = [re.sub(r"[ \t 　]+", " ", line).strip() for line in text.split("\n")]
     return "\n".join(lines)
@@ -222,7 +240,17 @@ def build_narration_chunks_paged(
     sent_pages: list[tuple[str, int]] = []
     for page_no, text in page_texts:
         for sent in split_sentences(clean_text(text)):
-            sent_pages.append((sent, page_no))
+            # 페이지 경계에서 끊긴 문장 이어붙이기: 직전 페이지의 마지막
+            # 문장이 종결부호 없이 끝났으면 다음 페이지 첫 문장과 한 문장이다
+            if (
+                sent_pages
+                and sent_pages[-1][1] != page_no
+                and not re.search(r"[.!?…]$", sent_pages[-1][0])
+            ):
+                prev_sent, prev_page = sent_pages[-1]
+                sent_pages[-1] = (f"{prev_sent} {sent}", prev_page)
+            else:
+                sent_pages.append((sent, page_no))
 
     grouped = _group_sentence_pages(sent_pages, MAX_CHUNK_SENTENCES, MAX_CHUNK_CHARS)
     return [

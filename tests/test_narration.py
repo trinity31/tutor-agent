@@ -214,7 +214,38 @@ def test_청크_순서_보존():
     assert flat == sentences
 
 
+# --- 2-4. 가짜 마침표 억제 (종결 어미 휴리스틱) ---
+
+
+def test_종결_어미_아닌_글자_뒤_마침표_제거():
+    # PDF가 줄 끝에 몰아둔 마침표가 엉뚱한 단어에 붙은 경우 — 문장이 끊기면 안 됨
+    raw = "천지가 감통한다 그래서 사람. .\n이 명 만을 유일하게 믿는 것은 불가하다."
+    sentences = split_sentences(clean_text(raw))
+    assert sentences == ["천지가 감통한다 그래서 사람 이 명 만을 유일하게 믿는 것은 불가하다."]
+
+
+def test_종결_어미_뒤_마침표는_보존():
+    assert clean_text("믿는 것은 불가하다.") == "믿는 것은 불가하다."
+    assert clean_text("사주팔자를 고치게 되는 것.") == "사주팔자를 고치게 되는 것."
+
+
+def test_꺾쇠_겹낫표_제거():
+    assert clean_text("사람이 관리해주< >니 존재한다") == "사람이 관리해주 니 존재한다"
+    assert clean_text("『황제택경』에서 말하길") == "황제택경에서 말하길"
+
+
 # --- 페이지 매핑 (PDF 뷰 자동 넘김 근거) ---
+
+
+def test_페이지_경계에서_끊긴_문장_이어붙이기():
+    pages = [
+        (1, "이렇게 사람과 집이"),
+        (2, "상부상조하니 천지가 감통한다. 다음 문장입니다."),
+    ]
+    chunks = build_narration_chunks_paged(pages)
+    flat = [(s, c["page"]) for c in chunks for s in c["sentences"]]
+    assert flat[0] == ("이렇게 사람과 집이 상부상조하니 천지가 감통한다.", 1)
+    assert flat[1][0] == "다음 문장입니다."
 
 
 def test_페이지_청크에_시작_페이지_기록():

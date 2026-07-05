@@ -10,6 +10,7 @@ import re
 import shutil
 import struct
 import subprocess
+import unicodedata
 import uuid
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
@@ -296,9 +297,20 @@ def get_material_indexing_status(user_id: str, class_id: str, display_name: str)
 
 
 def get_material_path(user_id: str, class_id: str, display_name: str) -> Path | None:
-    """로컬에 저장된 PDF 경로를 반환합니다."""
-    path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
-    return path if path.exists() else None
+    """로컬에 저장된 PDF 경로를 반환합니다.
+
+    macOS 업로드 파일명은 NFD로 저장될 수 있어(Linux 볼륨은 바이트 단위 매칭)
+    양쪽 유니코드 정규화 형태를 모두 시도합니다.
+    """
+    for name in {
+        display_name,
+        unicodedata.normalize("NFC", display_name),
+        unicodedata.normalize("NFD", display_name),
+    }:
+        path = _MATERIALS_DIR / user_id / class_id / f"{name}.pdf"
+        if path.exists():
+            return path
+    return None
 
 
 def generate_example_messages(user_id: str, class_id: str, material_names: str = "") -> list[dict]:
@@ -359,9 +371,19 @@ _TTS_CONCURRENCY = 3
 _tts_engine = get_engine()
 
 
+def _nfc(name: str) -> str:
+    """자료명을 NFC로 정규화합니다.
+
+    macOS 업로드 파일명(NFD)과 브라우저·API 경유 이름(NFC)이 섞이면
+    같은 자료가 다른 캐시 키로 중복 생성되므로, 오디오 캐시 키(DB·파일 경로)는
+    항상 NFC로 통일한다.
+    """
+    return unicodedata.normalize("NFC", name)
+
+
 def _audio_base(user_id: str, material_id: str, section: str, voice: str) -> Path:
     """오디오 파일 경로의 확장자 없는 base를 반환합니다."""
-    return _AUDIO_DIR / user_id / material_id / f"{section}_{voice}"
+    return _AUDIO_DIR / user_id / _nfc(material_id) / f"{section}_{voice}"
 
 
 def _pdf_page_count(pdf_path: Path) -> int:
@@ -405,6 +427,7 @@ def request_audio(
     """
     from .auth import create_audio_asset, get_audio_asset, reset_audio_asset
 
+    material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if asset:
         if asset["status"] == "ready" and Path(asset["file_path"]).exists():
@@ -429,6 +452,7 @@ def get_audio_status(
     """오디오 생성 상태를 반환합니다 (실패 시 사유 포함)."""
     from .auth import get_audio_asset
 
+    material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if not asset:
         return {"status": "none", "duration": 0, "error": ""}
@@ -445,6 +469,7 @@ def get_audio_file(
     """ready 상태인 오디오 파일 경로와 media type을 반환합니다."""
     from .auth import get_audio_asset
 
+    material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if not asset or asset["status"] != "ready":
         return None
@@ -590,6 +615,7 @@ def generate_audio_asset(
 
     from .auth import get_audio_asset, update_audio_asset
 
+    material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if not asset or asset["status"] not in ("pending", "generating"):
         return
