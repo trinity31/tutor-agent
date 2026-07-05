@@ -10,6 +10,10 @@ RUN npm run build
 FROM python:3.13-slim
 WORKDIR /app
 
+# ffmpeg — 낭독 오디오 MP3 인코딩용 (없으면 WAV 폴백, 용량 6배)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv 설치
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
