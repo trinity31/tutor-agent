@@ -186,7 +186,7 @@ export async function getAudioStatus(
   section: string,
   voice: string,
 ) {
-  return apiGet<{ status: AudioStatus; duration: number }>(
+  return apiGet<{ status: AudioStatus; duration: number; error?: string }>(
     `${audioBase(classId, materialName)}/status?section=${encodeURIComponent(section)}&voice=${voice}`,
   );
 }

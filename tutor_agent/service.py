@@ -426,13 +426,17 @@ def request_audio(
 def get_audio_status(
     user_id: str, class_id: str, material_name: str, section: str, voice: str
 ) -> dict:
-    """오디오 생성 상태를 반환합니다."""
+    """오디오 생성 상태를 반환합니다 (실패 시 사유 포함)."""
     from .auth import get_audio_asset
 
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if not asset:
-        return {"status": "none", "duration": 0}
-    return {"status": asset["status"], "duration": asset["duration"]}
+        return {"status": "none", "duration": 0, "error": ""}
+    return {
+        "status": asset["status"],
+        "duration": asset["duration"],
+        "error": asset.get("error", ""),
+    }
 
 
 def get_audio_file(
@@ -565,6 +569,14 @@ def _encode_audio(pcm: bytes, base: Path) -> Path:
     return wav_path
 
 
+def _audio_error_message(e: Exception) -> str:
+    """생성 실패 예외를 사용자 안내 문구로 변환합니다."""
+    msg = str(e)
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+        return "일일 오디오 생성 한도를 초과했습니다. 내일 다시 시도해 주세요."
+    return "오디오 생성 중 오류가 발생했습니다. 다시 시도해 주세요."
+
+
 def generate_audio_asset(
     user_id: str, class_id: str, material_name: str, section: str, voice: str
 ):
@@ -584,7 +596,7 @@ def generate_audio_asset(
 
     def _fail(reason: str):
         logger.error(f"오디오 생성 실패: {material_name}/{section} — {reason}")
-        update_audio_asset(asset["id"], status="failed")
+        update_audio_asset(asset["id"], status="failed", error=reason)
 
     try:
         update_audio_asset(asset["id"], status="generating")
@@ -592,13 +604,13 @@ def generate_audio_asset(
         pdf_path = get_material_path(user_id, class_id, material_name)
         pages = _parse_section(section)
         if not pdf_path or not pages:
-            return _fail("PDF 또는 섹션을 찾을 수 없음")
+            return _fail("PDF 원본을 찾을 수 없습니다.")
 
         reader = PdfReader(str(pdf_path))
         start, end = pages
         chunks = build_narration_chunks_paged(_extract_body_pages(reader, start, end))
         if not chunks:
-            return _fail("낭독할 문장이 없음 (이미지 기반 PDF일 수 있음)")
+            return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
 
         # 청크별 TTS 호출 (제한된 동시성)
         with ThreadPoolExecutor(max_workers=_TTS_CONCURRENCY) as pool:
@@ -644,9 +656,11 @@ def generate_audio_asset(
         logger.info(
             f"오디오 생성 완료: {material_name}/{section} ({voice}, {cursor:.0f}초, {len(chunks)}청크)"
         )
-    except Exception:
+    except Exception as e:
         logger.exception(f"오디오 생성 실패: {material_name}/{section}")
-        update_audio_asset(asset["id"], status="failed")
+        update_audio_asset(
+            asset["id"], status="failed", error=_audio_error_message(e)
+        )
 
 
 # --- 복습 스케줄링 ---

@@ -145,7 +145,10 @@ export const useAudioStore = create<AudioState>((set, get) => ({
           if (s.status === 'ready') {
             await finishReady();
           } else if (s.status === 'failed') {
-            set({ status: 'failed', error: '오디오 생성에 실패했습니다. 다시 시도해 주세요.' });
+            set({
+              status: 'failed',
+              error: s.error || '오디오 생성에 실패했습니다. 다시 시도해 주세요.',
+            });
           } else {
             set({ status: s.status });
             setTimeout(poll, POLL_INTERVAL);

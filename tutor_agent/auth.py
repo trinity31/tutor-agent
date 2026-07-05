@@ -116,11 +116,17 @@ def _get_db() -> sqlite3.Connection:
             status TEXT NOT NULL DEFAULT 'pending',
             duration REAL NOT NULL DEFAULT 0,
             file_path TEXT NOT NULL DEFAULT '',
+            error TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(user_id, class_id, material_id, section, voice)
         )
         """
     )
+    # 기존 DB 마이그레이션: 실패 사유 컬럼 (없으면 추가)
+    try:
+        conn.execute("ALTER TABLE audio_assets ADD COLUMN error TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS study_notes (
@@ -557,7 +563,8 @@ def reset_audio_asset(asset_id: str) -> bool:
     conn = _get_db()
     try:
         cur = conn.execute(
-            """UPDATE audio_assets SET status = 'pending', duration = 0, file_path = ''
+            """UPDATE audio_assets
+               SET status = 'pending', duration = 0, file_path = '', error = ''
                WHERE id = ? AND status IN ('failed', 'ready')""",
             (asset_id,),
         )
