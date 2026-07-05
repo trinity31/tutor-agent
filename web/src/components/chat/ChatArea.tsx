@@ -33,8 +33,25 @@ export default function ChatArea() {
     selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
   const [indexPanelOpen, setIndexPanelOpen] = useState(true);
 
+  // 모바일(<md)에서는 패널을 전체 화면 오버레이로 띄운다
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia('(max-width: 767px)').matches,
+  );
   useEffect(() => {
-    if (indexableMaterial) setIndexPanelOpen(true);
+    const mq = window.matchMedia('(max-width: 767px)');
+    const sync = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      mq.removeEventListener('change', sync);
+      window.removeEventListener('resize', sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    // 데스크톱은 자료 선택 시 자동으로 열고, 모바일은 화면을 덮으므로 버튼으로 연다
+    if (indexableMaterial) setIndexPanelOpen(!isMobile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indexableMaterial]);
 
   // 패널 폭 — 좌측 가장자리 드래그로 조절, localStorage에 유지
@@ -115,9 +132,9 @@ export default function ChatArea() {
             <button
               onClick={() => setIndexPanelOpen(true)}
               className="ml-auto rounded-md border border-primary-200 bg-white px-2 py-0.5 text-[11px] font-medium text-primary-600 hover:bg-primary-50 transition-colors"
-              title="학습 인덱스 열기"
+              title="학습 인덱스·원문 낭독 열기"
             >
-              인덱스 보기
+              인덱스·듣기
             </button>
           )}
         </div>
@@ -200,22 +217,33 @@ export default function ChatArea() {
       )}
       </div>
 
-      {/* Index panel (자료 1개 선택 시) — 좌측 가장자리 드래그로 폭 조절 */}
+      {/* Index panel (자료 1개 선택 시) — 데스크톱: 사이드 패널(드래그 폭 조절),
+          모바일: 전체 화면 오버레이. 오디오 요소 중복을 피하기 위해 한쪽만 렌더링 */}
       {indexableMaterial && indexPanelOpen && selectedClassId && (
-        <div className="hidden shrink-0 md:flex" style={{ width: panelWidth }}>
-          <div
-            onMouseDown={startPanelResize}
-            className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-primary-300 active:bg-primary-400 transition-colors"
-            title="드래그하여 패널 크기 조절"
-          />
-          <div className="min-w-0 flex-1">
+        isMobile ? (
+          <div className="fixed inset-0 z-50 bg-white">
             <MaterialIndexPanel
               classId={selectedClassId}
               materialName={indexableMaterial}
               onClose={() => setIndexPanelOpen(false)}
             />
           </div>
-        </div>
+        ) : (
+          <div className="flex shrink-0" style={{ width: panelWidth }}>
+            <div
+              onMouseDown={startPanelResize}
+              className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-primary-300 active:bg-primary-400 transition-colors"
+              title="드래그하여 패널 크기 조절"
+            />
+            <div className="min-w-0 flex-1">
+              <MaterialIndexPanel
+                classId={selectedClassId}
+                materialName={indexableMaterial}
+                onClose={() => setIndexPanelOpen(false)}
+              />
+            </div>
+          </div>
+        )
       )}
     </div>
   );
