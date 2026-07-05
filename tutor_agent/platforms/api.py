@@ -65,6 +65,15 @@ from .slack import slack_handler
 
 load_dotenv()
 
+# 에러 추적 (SENTRY_DSN 설정 시에만 활성화 — FastAPI 자동 계측)
+if os.getenv("SENTRY_DSN"):
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_RATE", "0.1")),
+    )
+
 security = HTTPBearer()
 
 
