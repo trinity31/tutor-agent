@@ -20,10 +20,13 @@ export default function PdfPageView({ fileUrl, playbackPage, onListenFromPage }:
   const [manualPage, setManualPage] = useState<number | null>(null);
 
   useEffect(() => {
-    const measure = () => setWidth(containerRef.current?.clientWidth ?? 0);
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    const el = containerRef.current;
+    if (!el) return;
+    // 창 크기뿐 아니라 패널 드래그 리사이즈에도 반응
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.observe(el);
+    setWidth(el.clientWidth);
+    return () => observer.disconnect();
   }, []);
 
   // 재생 위치가 움직이면 수동 탐색을 해제하고 재생 페이지로 복귀

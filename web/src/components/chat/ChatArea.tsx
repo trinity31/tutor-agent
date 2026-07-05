@@ -37,6 +37,32 @@ export default function ChatArea() {
     if (indexableMaterial) setIndexPanelOpen(true);
   }, [indexableMaterial]);
 
+  // 패널 폭 — 좌측 가장자리 드래그로 조절, localStorage에 유지
+  const [panelWidth, setPanelWidth] = useState(
+    () => Number(localStorage.getItem('tutor-panel-width')) || 448,
+  );
+
+  const startPanelResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    let latest = panelWidth;
+    const onMove = (ev: MouseEvent) => {
+      const max = Math.min(900, window.innerWidth * 0.7);
+      latest = Math.min(Math.max(window.innerWidth - ev.clientX, 360), max);
+      setPanelWidth(latest);
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      localStorage.setItem('tutor-panel-width', String(latest));
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -174,14 +200,21 @@ export default function ChatArea() {
       )}
       </div>
 
-      {/* Index panel (자료 1개 선택 시) */}
+      {/* Index panel (자료 1개 선택 시) — 좌측 가장자리 드래그로 폭 조절 */}
       {indexableMaterial && indexPanelOpen && selectedClassId && (
-        <div className="hidden w-md shrink-0 md:block lg:w-lg">
-          <MaterialIndexPanel
-            classId={selectedClassId}
-            materialName={indexableMaterial}
-            onClose={() => setIndexPanelOpen(false)}
+        <div className="hidden shrink-0 md:flex" style={{ width: panelWidth }}>
+          <div
+            onMouseDown={startPanelResize}
+            className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-primary-300 active:bg-primary-400 transition-colors"
+            title="드래그하여 패널 크기 조절"
           />
+          <div className="min-w-0 flex-1">
+            <MaterialIndexPanel
+              classId={selectedClassId}
+              materialName={indexableMaterial}
+              onClose={() => setIndexPanelOpen(false)}
+            />
+          </div>
         </div>
       )}
     </div>

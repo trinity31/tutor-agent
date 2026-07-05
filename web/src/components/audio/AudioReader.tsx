@@ -6,6 +6,8 @@ import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
 const PdfPageView = lazy(() => import('./PdfPageView'));
 
 const VIEW_KEY = 'tutor-audio-view';
+const FONT_KEY = 'tutor-audio-font';
+const FONT_SIZES = [14, 16, 18, 20, 22];
 
 interface Props {
   classId: string;
@@ -51,6 +53,18 @@ export default function AudioReader({ classId, materialName }: Props) {
     const next = viewMode === 'pdf' ? 'text' : 'pdf';
     localStorage.setItem(VIEW_KEY, next);
     setViewMode(next);
+  };
+
+  // 낭독 텍스트 글자 크기 (A− / A+)
+  const [fontSize, setFontSize] = useState(() => {
+    const saved = Number(localStorage.getItem(FONT_KEY));
+    return FONT_SIZES.includes(saved) ? saved : 14;
+  });
+  const stepFont = (dir: 1 | -1) => {
+    const idx = FONT_SIZES.indexOf(fontSize) + dir;
+    const next = FONT_SIZES[Math.min(Math.max(idx, 0), FONT_SIZES.length - 1)];
+    localStorage.setItem(FONT_KEY, String(next));
+    setFontSize(next);
   };
 
   useEffect(() => {
@@ -188,6 +202,26 @@ export default function AudioReader({ classId, materialName }: Props) {
         >
           {viewMode === 'pdf' ? '📝 텍스트' : '📄 원본'}
         </button>
+        {viewMode === 'text' && (
+          <div className="flex shrink-0 items-center rounded-md border border-warm-200 bg-white">
+            <button
+              onClick={() => stepFont(-1)}
+              disabled={fontSize <= FONT_SIZES[0]}
+              className="px-1.5 py-1 text-[11px] text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+              title="글자 작게"
+            >
+              A−
+            </button>
+            <button
+              onClick={() => stepFont(1)}
+              disabled={fontSize >= FONT_SIZES[FONT_SIZES.length - 1]}
+              className="border-l border-warm-200 px-1.5 py-1 text-[13px] text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+              title="글자 크게"
+            >
+              A+
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 본문: PDF 원본 (페이지 자동 넘김) 또는 낭독 텍스트 (청크 하이라이트) */}
@@ -229,14 +263,14 @@ export default function AudioReader({ classId, materialName }: Props) {
           </div>
         )}
         {status === 'ready' && manifest && (
-          <div className="space-y-3 leading-relaxed">
+          <div className="space-y-3 leading-relaxed" style={{ fontSize }}>
             {manifest.chunks.map((chunk, ci) => (
               <p
                 key={ci}
                 ref={(el) => {
                   chunkRefs.current[ci] = el;
                 }}
-                className={`rounded-md px-2 py-1 text-sm text-warm-800 transition-colors ${
+                className={`rounded-md px-2 py-1 text-warm-800 transition-colors ${
                   ci === currentChunk
                     ? 'bg-primary-50 shadow-[inset_0_-2px_0_theme(colors.primary.300)]'
                     : ''
