@@ -8,9 +8,10 @@ import logging
 import time
 from typing import Protocol
 
+from google import genai
 from google.genai import types
 
-from .file_search import get_client, reset_client
+from .file_search import GOOGLE_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,12 @@ VOICES = {
 DEFAULT_VOICE = "Charon"
 
 _NARRATION_PROMPT = "다음 텍스트를 차분한 강의 낭독 톤으로 읽어주세요:\n\n"
+
+
+def _is_daily_quota_error(e: Exception) -> bool:
+    """일일 쿼터 초과(재시도 무의미) 오류인지 판별합니다."""
+    msg = str(e)
+    return "RESOURCE_EXHAUSTED" in msg and ("PerDay" in msg or "per_day" in msg)
 
 
 def pcm_duration(pcm: bytes) -> float:
@@ -50,8 +57,8 @@ class GeminiTTSEngine:
     def synthesize(self, text: str, voice: str) -> bytes:
         """텍스트를 PCM으로 합성합니다. 빈 응답·일시 오류 시 자동 재시도합니다.
 
-        (gemini가 간헐적으로 빈 응답을 내는 것을 흡수 — stream_chat의 재시도 패턴 참조.
-        병렬 호출 중 공유 클라이언트가 닫히는 오류는 클라이언트를 재생성해 복구한다.)
+        (gemini가 간헐적으로 빈 응답을 내는 것을 흡수 — stream_chat의 재시도 패턴 참조.)
+        일일 쿼터 초과는 재시도해도 소용없으므로 즉시 실패합니다.
         """
         last_error: Exception | None = None
         for attempt in range(self.MAX_ATTEMPTS):
@@ -64,7 +71,8 @@ class GeminiTTSEngine:
                 logger.warning(
                     "TTS 호출 실패 (%d/%d): %s", attempt + 1, self.MAX_ATTEMPTS, e
                 )
-                reset_client()
+                if _is_daily_quota_error(e):
+                    break
                 continue
             if pcm:
                 return pcm
@@ -75,7 +83,10 @@ class GeminiTTSEngine:
         raise RuntimeError(f"TTS 합성에 실패했습니다: {last_error or '빈 응답'}")
 
     def _call(self, text: str, voice: str) -> bytes:
-        response = get_client().models.generate_content(
+        # 호출마다 독립 클라이언트 사용 — 병렬 호출 중 한 스레드의 오류가
+        # 공유 클라이언트를 닫아 다른 스레드까지 죽이는 것을 방지
+        client = genai.Client(api_key=GOOGLE_API_KEY)
+        response = client.models.generate_content(
             model=TTS_MODEL,
             contents=_NARRATION_PROMPT + text,
             config=types.GenerateContentConfig(
