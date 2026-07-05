@@ -18,8 +18,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import sqlite3
+
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .agents.graph import build_graph
 from .file_search import (
@@ -42,7 +44,13 @@ from .narration import build_narration_chunks_paged
 from .tts import get_engine, PCM_RATE, pcm_duration
 
 # --- 그래프 싱글턴 ---
-_checkpointer = MemorySaver()
+# 대화 히스토리를 SQLite에 영속화 — 재배포해도 스레드가 유지된다.
+_CHECKPOINT_DB = Path(__file__).parent.parent / "data" / "checkpoints.db"
+_CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+_checkpoint_conn = sqlite3.connect(str(_CHECKPOINT_DB), check_same_thread=False)
+_checkpoint_conn.execute("PRAGMA journal_mode=WAL")
+_checkpoint_conn.execute("PRAGMA busy_timeout=5000")
+_checkpointer = SqliteSaver(_checkpoint_conn)
 _graph = build_graph(checkpointer=_checkpointer)
 
 # 에이전트 한글 레이블
