@@ -646,6 +646,15 @@ def generate_audio_asset(
         if not chunks:
             return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
 
+        # TTS로 보내는 실제 문자 수를 사용량으로 기록 (월 한도 검사의 근거)
+        from .usage import add_usage
+
+        add_usage(
+            user_id,
+            "tts_chars_monthly",
+            sum(len(s) for c in chunks for s in c["sentences"]),
+        )
+
         # 청크별 TTS 호출 (제한된 동시성)
         with ThreadPoolExecutor(max_workers=_TTS_CONCURRENCY) as pool:
             pcms = list(

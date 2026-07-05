@@ -60,6 +60,7 @@ from ..service import (
     upload_material,
 )
 from ..tts import DEFAULT_VOICE, VOICES
+from ..usage import add_usage, check_limit
 from .slack import slack_handler
 
 load_dotenv()
@@ -222,6 +223,9 @@ async def upload(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
 
+    if over := check_limit(user["email"], "uploads_monthly"):
+        raise HTTPException(status_code=429, detail=over)
+
     display_name = os.path.splitext(file.filename)[0]
 
     MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
@@ -241,6 +245,8 @@ async def upload(
         raise HTTPException(
             status_code=409, detail=f"이미 업로드된 파일입니다: {result['name']}"
         )
+
+    add_usage(user["email"], "uploads_monthly")
 
     # 인덱싱 + 마크다운 인덱스 생성을 백그라운드에서 완료
     background_tasks.add_task(
@@ -360,6 +366,12 @@ async def material_audio_request(
         raise HTTPException(status_code=404, detail="PDF 원본을 찾을 수 없습니다.")
     if body.section not in {s["section"] for s in sections}:
         raise HTTPException(status_code=400, detail="유효하지 않은 섹션입니다.")
+
+    # 캐시된 오디오 재생은 한도와 무관 — 새로 생성해야 할 때만 검사
+    status = get_audio_status(user["email"], class_id, material_name, body.section, body.voice)
+    if status["status"] != "ready":
+        if over := check_limit(user["email"], "tts_chars_monthly"):
+            raise HTTPException(status_code=429, detail=over)
 
     result = request_audio(
         user["email"], class_id, material_name, body.section, body.voice
@@ -515,6 +527,9 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def chat(body: ChatRequest, user: dict = Depends(get_current_user)):
     """SSE 스트리밍으로 에이전트 응답을 반환합니다."""
+    if over := check_limit(user["email"], "chat_daily"):
+        raise HTTPException(status_code=429, detail=over)
+    add_usage(user["email"], "chat_daily")
 
     async def event_generator():
         async for event in stream_chat(

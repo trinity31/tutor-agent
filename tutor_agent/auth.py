@@ -132,6 +132,17 @@ def _get_db() -> sqlite3.Connection:
         pass
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS usage_counters (
+            user_email TEXT NOT NULL,
+            metric TEXT NOT NULL,
+            period TEXT NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_email, metric, period)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS indexing_status (
             key TEXT PRIMARY KEY,
             status TEXT NOT NULL,
