@@ -102,7 +102,7 @@ def upload_pdf(store_name: str, file_path: str, display_name: str):
 
 # --- 인덱싱 상태 추적 ---
 # key: "{store_name}:{display_name}", value: "indexing" | "ready" | "error"
-_indexing_status: dict[str, str] = {}
+# DB에 영속화 — 서버 재시작·다중 워커에서도 상태가 유지된다.
 
 
 def _status_key(store_name: str, display_name: str) -> str:
@@ -111,15 +111,15 @@ def _status_key(store_name: str, display_name: str) -> str:
 
 def get_indexing_status(store_name: str, display_name: str) -> str:
     """자료의 인덱싱 상태를 반환합니다. 추적 중이 아니면 "ready"."""
-    return _indexing_status.get(_status_key(store_name, display_name), "ready")
+    from .auth import get_indexing_status_db
+
+    return get_indexing_status_db(_status_key(store_name, display_name))
 
 
 def set_indexing_status(store_name: str, display_name: str, status: str):
-    key = _status_key(store_name, display_name)
-    if status == "ready":
-        _indexing_status.pop(key, None)
-    else:
-        _indexing_status[key] = status
+    from .auth import set_indexing_status_db
+
+    set_indexing_status_db(_status_key(store_name, display_name), status)
 
 
 def upload_pdf_start(store_name: str, file_path: str, display_name: str):

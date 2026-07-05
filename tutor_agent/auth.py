@@ -132,6 +132,15 @@ def _get_db() -> sqlite3.Connection:
         pass
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS indexing_status (
+            key TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS study_notes (
             id TEXT PRIMARY KEY,
             user_email TEXT NOT NULL,
@@ -505,6 +514,52 @@ def mark_completion_generated(completion_id: str, quiz_id: str):
             (quiz_id, completion_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+# --- 인덱싱 상태 (자료 업로드 진행 추적) ---
+
+# 이 시간이 지난 'indexing' 상태는 중단된 것으로 간주 (서버 재시작 등)
+_INDEXING_STALE_MINUTES = 30
+
+
+def set_indexing_status_db(key: str, status: str):
+    """인덱싱 상태를 기록합니다. 'ready'는 행 삭제로 표현합니다."""
+    conn = _get_db()
+    try:
+        if status == "ready":
+            conn.execute("DELETE FROM indexing_status WHERE key = ?", (key,))
+        else:
+            conn.execute(
+                """INSERT INTO indexing_status (key, status, updated_at)
+                   VALUES (?, ?, datetime('now'))
+                   ON CONFLICT(key) DO UPDATE
+                   SET status = excluded.status, updated_at = excluded.updated_at""",
+                (key, status),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_indexing_status_db(key: str) -> str:
+    """인덱싱 상태를 반환합니다. 기록이 없으면 'ready',
+    오래 방치된 'indexing'은 'error'로 간주합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            f"""SELECT status,
+                       (updated_at < datetime('now', '-{_INDEXING_STALE_MINUTES} minutes'))
+                       AS stale
+                FROM indexing_status WHERE key = ?""",
+            (key,),
+        ).fetchone()
+        if not row:
+            return "ready"
+        if row["status"] == "indexing" and row["stale"]:
+            return "error"
+        return row["status"]
     finally:
         conn.close()
 
