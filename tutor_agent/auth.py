@@ -37,6 +37,9 @@ def _get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
+    # 다중 사용자 동시 접근 대비: WAL(읽기-쓰기 병행) + 잠금 대기
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -631,12 +634,16 @@ def get_study_notes(
         conn.close()
 
 
-def delete_study_note(note_id: str):
-    """학습 노트를 삭제합니다."""
+def delete_study_note(note_id: str, user_email: str) -> bool:
+    """본인 소유의 학습 노트를 삭제합니다. 소유자가 아니면 아무것도 지우지 않습니다."""
     conn = _get_db()
     try:
-        conn.execute("DELETE FROM study_notes WHERE id = ?", (note_id,))
+        cur = conn.execute(
+            "DELETE FROM study_notes WHERE id = ? AND user_email = ?",
+            (note_id, user_email.lower()),
+        )
         conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 

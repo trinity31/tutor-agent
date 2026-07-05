@@ -72,15 +72,35 @@ security = HTTPBearer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 프로덕션(Railway)에서 개발용 기본 시크릿으로 뜨는 것을 거부
+    if os.getenv("RAILWAY_ENVIRONMENT"):
+        missing = [
+            name
+            for name in ("JWT_SECRET_KEY", "CRON_SECRET")
+            if not os.getenv(name)
+        ]
+        if missing:
+            raise RuntimeError(
+                f"프로덕션 환경변수 누락: {', '.join(missing)} — "
+                "기본 시크릿으로는 기동할 수 없습니다."
+            )
     yield
 
 
 app = FastAPI(title="TutorAgent API", lifespan=lifespan)
 
-# CORS (개발용 — 프로덕션에서는 origin 제한)
+# CORS — ALLOWED_ORIGINS(콤마 구분)로 재정의, 기본은 로컬 개발 origin.
+# 프로덕션은 프론트를 같은 호스트에서 서빙하므로 추가 origin이 없어도 동작한다.
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000"
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -655,7 +675,8 @@ async def list_notes(class_id: str = "", material_name: str = "", user: dict = D
 
 @app.delete("/api/notes/{note_id}")
 async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
-    delete_study_note(note_id)
+    if not delete_study_note(note_id, user["email"]):
+        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
     return {"status": "deleted"}
 
 
