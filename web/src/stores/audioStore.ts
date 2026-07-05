@@ -43,6 +43,8 @@ interface AudioState {
   setRate: (rate: number) => void;
   setCurrentChunk: (idx: number) => void;
   requestGeneration: () => Promise<void>;
+  prefetchNext: () => void;
+  advanceToNext: () => boolean;
   reset: () => void;
 }
 
@@ -125,6 +127,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         fileUrl: audioFileUrl(classId, materialName, section, voice),
         status: 'ready',
       });
+      // 다음 섹션을 미리 생성해 두면 자동 이어듣기 시 대기가 없다
+      get().prefetchNext();
     };
 
     try {
@@ -163,6 +167,25 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       if (generation !== pollGeneration) return;
       set({ status: 'error', error: e instanceof Error ? e.message : '오디오 생성 요청에 실패했습니다.' });
     }
+  },
+
+  prefetchNext: () => {
+    const { classId, materialName, sections, section, voice } = get();
+    if (!classId || !materialName || !section) return;
+    const idx = sections.findIndex((s) => s.section === section);
+    const next = sections[idx + 1];
+    if (!next) return;
+    // 서버가 캐시·중복 생성을 알아서 처리하므로 fire-and-forget
+    requestAudio(classId, materialName, next.section, voice).catch(() => {});
+  },
+
+  advanceToNext: () => {
+    const { sections, section } = get();
+    const idx = sections.findIndex((s) => s.section === section);
+    const next = sections[idx + 1];
+    if (!next) return false;
+    get().selectSection(next.section);
+    return true;
   },
 
   reset: () => {

@@ -42,6 +42,8 @@ export default function AudioReader({ classId, materialName }: Props) {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const chunkRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  // 섹션 자동 이어듣기: 다음 섹션 오디오가 로드되면 바로 재생
+  const autoAdvanceRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -84,6 +86,10 @@ export default function AudioReader({ classId, materialName }: Props) {
     const saved = posKey ? Number(localStorage.getItem(posKey)) : 0;
     if (saved > 0 && saved < audio.duration - 1) {
       audio.currentTime = saved;
+    }
+    if (autoAdvanceRef.current) {
+      autoAdvanceRef.current = false;
+      audio.play();
     }
   };
 
@@ -148,6 +154,10 @@ export default function AudioReader({ classId, materialName }: Props) {
     setPlaying(false);
     if (posKey) localStorage.removeItem(posKey);
     setCurrentChunk(-1);
+    // 다음 섹션이 있으면 자동으로 이어듣기 (미생성이면 생성 후 이어짐)
+    if (useAudioStore.getState().advanceToNext()) {
+      autoAdvanceRef.current = true;
+    }
   };
 
   const generating = status === 'loading' || status === 'pending' || status === 'generating';
