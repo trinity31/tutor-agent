@@ -38,7 +38,7 @@ from .file_search import (
     GEMINI_MODEL,
 )
 from .narration import build_narration_chunks_paged
-from .tts import GeminiTTSEngine, PCM_RATE, pcm_duration
+from .tts import get_engine, PCM_RATE, pcm_duration
 
 # --- 그래프 싱글턴 ---
 _checkpointer = MemorySaver()
@@ -356,7 +356,7 @@ _SECTION_RE = re.compile(r"p(\d+)-(\d+)$")
 # TTS 동시 호출 수 (rate limit과 첫 재생 대기 시간의 균형)
 _TTS_CONCURRENCY = 3
 
-_tts_engine = GeminiTTSEngine()
+_tts_engine = get_engine()
 
 
 def _audio_base(user_id: str, material_id: str, section: str, voice: str) -> Path:
