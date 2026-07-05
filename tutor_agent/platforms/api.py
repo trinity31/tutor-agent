@@ -125,10 +125,15 @@ async def get_current_user(
 # --- Auth Endpoints ---
 
 
+# 초대 코드 — 설정되어 있으면 가입 시 요구 (베타 가입 제한). 미설정이면 개방.
+INVITE_CODE = os.getenv("INVITE_CODE", "")
+
+
 class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str = ""
+    invite_code: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -138,6 +143,8 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/register", status_code=201)
 async def register(body: RegisterRequest):
+    if INVITE_CODE and body.invite_code.strip() != INVITE_CODE:
+        raise HTTPException(status_code=403, detail="초대 코드가 올바르지 않습니다.")
     try:
         user = create_user(body.email, body.password, body.name)
     except ValueError as e:
