@@ -1,33 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+import { useEffect, useState } from 'react';
+import { pdfPageUrl } from '../../api/client';
 
 interface Props {
-  fileUrl: string;
+  classId: string;
+  materialName: string;
+  /** 총 페이지 수 (매니페스트/섹션에서 계산) */
+  numPages: number;
   /** 재생 위치에 해당하는 페이지 — 바뀌면 자동으로 넘어간다 */
   playbackPage: number;
   /** 페이지 단위 시크 ("이 페이지부터 듣기"). 페이지 정보 없는 구버전 매니페스트면 undefined */
   onListenFromPage?: (page: number) => void;
 }
 
-export default function PdfPageView({ fileUrl, playbackPage, onListenFromPage }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [numPages, setNumPages] = useState(0);
+export default function PdfPageView({
+  classId,
+  materialName,
+  numPages,
+  playbackPage,
+  onListenFromPage,
+}: Props) {
   // 사용자가 직접 넘긴 페이지 — 재생 위치가 바뀌면 다시 재생 페이지를 따라간다
   const [manualPage, setManualPage] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    // 창 크기뿐 아니라 패널 드래그 리사이즈에도 반응
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-    observer.observe(el);
-    setWidth(el.clientWidth);
-    return () => observer.disconnect();
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   // 재생 위치가 움직이면 수동 탐색을 해제하고 재생 페이지로 복귀
   useEffect(() => {
@@ -36,24 +31,34 @@ export default function PdfPageView({ fileUrl, playbackPage, onListenFromPage }:
 
   const page = Math.max(1, Math.min(manualPage ?? playbackPage, numPages || 1));
 
+  // 페이지가 바뀌면 로딩 상태 초기화
+  useEffect(() => {
+    setLoading(true);
+    setFailed(false);
+  }, [page]);
+
   return (
     <div className="flex h-full flex-col">
-      <div ref={containerRef} className="flex-1 overflow-y-auto bg-warm-100/60">
-        <Document
-          file={fileUrl}
-          onLoadSuccess={({ numPages: n }) => setNumPages(n)}
-          loading={<p className="p-4 text-sm text-warm-400">PDF를 불러오는 중...</p>}
-          error={<p className="p-4 text-sm text-error-500">PDF를 불러오지 못했습니다.</p>}
-        >
-          {width > 0 && numPages > 0 && (
-            <Page
-              pageNumber={page}
-              width={width}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-            />
-          )}
-        </Document>
+      <div className="relative flex-1 overflow-y-auto bg-warm-100/60">
+        {loading && !failed && (
+          <p className="absolute inset-x-0 top-4 text-center text-sm text-warm-400">
+            페이지를 불러오는 중...
+          </p>
+        )}
+        {failed ? (
+          <p className="p-4 text-sm text-error-500">페이지를 불러오지 못했습니다.</p>
+        ) : (
+          <img
+            src={pdfPageUrl(classId, materialName, page)}
+            alt={`${page}쪽`}
+            className="mx-auto block w-full max-w-full"
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setFailed(true);
+            }}
+          />
+        )}
       </div>
 
       {/* 페이지 내비게이션 */}

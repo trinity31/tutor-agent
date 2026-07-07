@@ -52,6 +52,7 @@ from ..service import (
     get_material_indexing_status,
     get_material_path,
     get_materials,
+    render_pdf_page,
     new_thread_id,
     parse_schedule_date,
     regenerate_material_index,
@@ -521,6 +522,37 @@ async def material_pdf(
     if not path:
         raise HTTPException(status_code=404, detail="PDF 원본을 찾을 수 없습니다.")
     return FileResponse(path, media_type="application/pdf")
+
+
+@app.get("/api/classes/{class_id}/materials/{material_name}/pdf/page/{page}")
+async def material_pdf_page(
+    class_id: str,
+    material_name: str,
+    page: int,
+    request: Request,
+    token: str = "",
+):
+    """PDF 한 페이지를 서버에서 PNG로 렌더해 반환합니다 (원본 뷰).
+
+    클라이언트 pdf.js가 이미지를 누락하는 문제를 피하기 위해 서버 렌더링을 쓴다.
+    <img> 태그는 Authorization 헤더를 붙일 수 없으므로 token 쿼리도 허용.
+    """
+    auth_header = request.headers.get("authorization", "")
+    raw_token = auth_header.removeprefix("Bearer ").strip() or token
+    email = verify_token(raw_token) if raw_token else None
+    user = get_user(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+    _check_class_owner(class_id, user)
+
+    img_path = render_pdf_page(user["email"], class_id, material_name, page)
+    if not img_path:
+        raise HTTPException(status_code=404, detail="페이지를 찾을 수 없습니다.")
+    return FileResponse(
+        img_path,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 # --- Chat Endpoints ---

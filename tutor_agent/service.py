@@ -394,6 +394,42 @@ def _audio_base(user_id: str, material_id: str, section: str, voice: str) -> Pat
     return _AUDIO_DIR / user_id / _nfc(material_id) / f"{section}_{voice}"
 
 
+# PDF 페이지 렌더 이미지 캐시 (원본 뷰용). 클라이언트 pdf.js가 이미지를
+# 조용히 누락하는 문제 때문에 서버에서 pypdfium2로 렌더한다.
+_PDF_PAGE_DIR = Path(__file__).parent.parent / "data" / "pdf_pages"
+_PDF_RENDER_SCALE = 2.0  # 24kHz 무관, 화질용 배율 (~150dpi)
+
+
+def render_pdf_page(
+    user_id: str, class_id: str, material_name: str, page: int
+) -> Path | None:
+    """PDF 한 페이지(1-based)를 PNG로 렌더해 캐시 경로를 반환합니다.
+
+    이미 렌더된 페이지는 캐시에서 즉시 반환합니다. PDF가 없거나 페이지
+    범위를 벗어나면 None.
+    """
+    pdf_path = get_material_path(user_id, class_id, material_name)
+    if not pdf_path:
+        return None
+
+    out = _PDF_PAGE_DIR / user_id / _nfc(material_name) / f"p{page}.png"
+    if out.exists():
+        return out
+
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
+    try:
+        if page < 1 or page > len(doc):
+            return None
+        out.parent.mkdir(parents=True, exist_ok=True)
+        bitmap = doc[page - 1].render(scale=_PDF_RENDER_SCALE)
+        bitmap.to_pil().save(out, format="PNG", optimize=True)
+        return out
+    finally:
+        doc.close()
+
+
 def _pdf_page_count(pdf_path: Path) -> int:
     from pypdf import PdfReader
 

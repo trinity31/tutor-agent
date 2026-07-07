@@ -1,5 +1,4 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { pdfFileUrl } from '../../api/client';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
 
 // pdf.js 번들이 커서 PDF 뷰를 열 때만 로드
@@ -166,6 +165,12 @@ export default function AudioReader({ classId, materialName }: Props) {
   const hasPages = manifest?.chunks.some((c) => c.page != null) ?? false;
   const playbackPage =
     manifest?.chunks[Math.max(currentChunk, 0)]?.page ?? manifest?.chunks[0]?.page ?? 1;
+  // 총 페이지 수 — 마지막 섹션 ID("p25-31")의 끝 페이지에서 계산
+  const numPages =
+    sections.reduce((max, s) => {
+      const m = s.section.match(/-(\d+)$/);
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, 0) || 1;
 
   // "이 페이지부터 듣기" — 해당 페이지의 첫 청크로 시크
   const listenFromPage = (page: number) => {
@@ -241,7 +246,9 @@ export default function AudioReader({ classId, materialName }: Props) {
             fallback={<p className="p-4 text-sm text-warm-400">PDF 뷰어를 불러오는 중...</p>}
           >
             <PdfPageView
-              fileUrl={pdfFileUrl(classId, materialName)}
+              classId={classId}
+              materialName={materialName}
+              numPages={numPages}
               playbackPage={playbackPage}
               onListenFromPage={hasPages ? listenFromPage : undefined}
             />
