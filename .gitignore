@@ -21,3 +21,15 @@ data/
 # React frontend
 web/node_modules/
 web/dist/
+
+# macOS
+.DS_Store
+
+# LangGraph dev 서버 산출물 (재생성됨)
+.langgraph_api/
+
+# Claude Code 로컬 설정 (launch.json 내용은 docs/PRODUCT_HANDOFF.md §4에 문서화됨)
+.claude/
+
+# TTS 음성 데모 (개발용, 대용량 바이너리)
+tts-demo/
