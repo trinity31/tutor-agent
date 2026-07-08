@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
+import { track } from '../../lib/analytics';
 
 // pdf.js 번들이 커서 PDF 뷰를 열 때만 로드
 const PdfPageView = lazy(() => import('./PdfPageView'));
@@ -43,6 +44,21 @@ export default function AudioReader({ classId, materialName }: Props) {
   const chunkRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   // 섹션 자동 이어듣기: 다음 섹션 오디오가 로드되면 바로 재생
   const autoAdvanceRef = useRef(false);
+
+  // 청취 계측(T9): 재생 시작 시점·컨텍스트를 스냅샷해 두고
+  // 일시정지·종료·섹션전환·언마운트에서 구간(초)을 합산 전송한다.
+  const playStartRef = useRef<number | null>(null);
+  const playCtxRef = useRef<Record<string, string> | null>(null);
+  const listenStartFiredRef = useRef(false);
+
+  const flushListen = useCallback(() => {
+    if (playStartRef.current == null || !playCtxRef.current) return;
+    const seconds = Math.round((Date.now() - playStartRef.current) / 1000);
+    const ctx = playCtxRef.current;
+    playStartRef.current = null;
+    playCtxRef.current = null;
+    if (seconds >= 1) track('listen_session', { ...ctx, seconds });
+  }, []);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -72,6 +88,15 @@ export default function AudioReader({ classId, materialName }: Props) {
     init(classId, materialName);
     return () => useAudioStore.getState().reset();
   }, [classId, materialName, init]);
+
+  // 자료·섹션 전환 또는 언마운트 시: 진행 중이던 청취 구간을 집계하고
+  // listen_start 재발화가 가능하도록 플래그를 리셋한다.
+  useEffect(() => {
+    return () => {
+      flushListen();
+      listenStartFiredRef.current = false;
+    };
+  }, [classId, materialName, section, flushListen]);
 
   const posKey =
     section && audioPositionKey(classId, materialName, section, voice);
@@ -151,6 +176,13 @@ export default function AudioReader({ classId, materialName }: Props) {
 
   const handleEnded = () => {
     setPlaying(false);
+    flushListen();
+    track('listen_complete_section', {
+      class_id: classId,
+      material_name: materialName,
+      section: section ?? '',
+      voice,
+    });
     if (posKey) localStorage.removeItem(posKey);
     setCurrentChunk(-1);
     // 다음 섹션이 있으면 자동으로 이어듣기 (미생성이면 생성 후 이어짐)
@@ -318,8 +350,31 @@ export default function AudioReader({ classId, materialName }: Props) {
             preload="metadata"
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
+            onPlay={() => {
+              setPlaying(true);
+              if (playStartRef.current == null) {
+                playStartRef.current = Date.now();
+                playCtxRef.current = {
+                  class_id: classId,
+                  material_name: materialName,
+                  section: section ?? '',
+                  voice,
+                };
+              }
+              if (!listenStartFiredRef.current) {
+                listenStartFiredRef.current = true;
+                track('listen_start', {
+                  class_id: classId,
+                  material_name: materialName,
+                  section: section ?? '',
+                  voice,
+                });
+              }
+            }}
+            onPause={() => {
+              setPlaying(false);
+              flushListen();
+            }}
             onEnded={handleEnded}
           />
           {/* 진행바 */}

@@ -75,6 +75,18 @@ LIMIT_UPLOADS_MONTHLY=       # 사용자별 월 업로드 한도 (기본 20)
 
 > 프로덕션(Railway)에서는 `JWT_SECRET_KEY`와 `CRON_SECRET`이 없으면 서버가 기동을 거부합니다.
 
+#### 프론트엔드 계측 (선택 — PostHog)
+
+PostHog 퍼널 계측은 **빌드 타임** 변수라 백엔드 `.env`가 아니라 `web/.env`(또는 빌드 시 환경)에 넣어야
+`npm run build` 산출물에 주입됩니다. **Railway 런타임 변수로는 적용되지 않습니다.** 키가 없으면 계측은
+전체 비활성(빌드·실행에 영향 없음).
+
+```
+# web/.env
+VITE_POSTHOG_KEY=            # PostHog 프로젝트 API 키 (없으면 계측 비활성)
+VITE_POSTHOG_HOST=           # PostHog 호스트 (기본 https://us.i.posthog.com)
+```
+
 ### 3. 실행
 
 ```bash

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiPost, apiGet } from '../api/client';
+import { identifyUser, resetAnalytics, track } from '../lib/analytics';
 
 interface User {
   email: string;
@@ -32,6 +33,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         password,
       });
       localStorage.setItem('token', res.token);
+      identifyUser(res.user.email);
       set({ user: res.user, token: res.token, loading: false });
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
@@ -48,6 +50,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         invite_code: inviteCode || '',
       });
       localStorage.setItem('token', res.token);
+      identifyUser(res.user.email);
+      track('signup');
       set({ user: res.user, token: res.token, loading: false });
     } catch (e) {
       set({ error: (e as Error).message, loading: false });
@@ -56,6 +60,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem('token');
+    resetAnalytics();
     set({ user: null, token: null });
   },
 
@@ -64,6 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (!token) return;
     try {
       const res = await apiGet<{ user: User }>('/auth/me');
+      identifyUser(res.user.email);
       set({ user: res.user, token });
     } catch {
       localStorage.removeItem('token');

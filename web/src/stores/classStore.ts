@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiGet, apiPost, apiDelete, apiUpload } from '../api/client';
+import { track } from '../lib/analytics';
 
 export interface ClassInfo {
   id: string;
@@ -105,6 +106,7 @@ export const useClassStore = create<ClassState>((set, get) => ({
       `/classes/${classId}/materials/upload`,
       file,
     );
+    track('material_upload', { class_id: classId, material_name: res.name });
     await get().loadMaterials(classId);
     if (res.status === 'indexing') {
       set((s) => ({ indexingMaterials: new Set([...s.indexingMaterials, res.name]) }));

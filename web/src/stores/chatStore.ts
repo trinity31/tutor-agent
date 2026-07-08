@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { streamChat, apiPost, saveQuizResult, type SSEEvent } from '../api/client';
 import { useClassStore } from './classStore';
+import { track } from '../lib/analytics';
 
 export interface Message {
   id: string;
@@ -66,6 +67,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (text: string, classId?: string, materialName?: string) => {
     const { threadId } = get();
+
+    // 메시지 본문은 보내지 않고 발생 사실만 계측
+    track('chat_message', { class_id: classId || '', has_material: !!materialName });
 
     // 사용자 메시지 추가
     set((s) => ({

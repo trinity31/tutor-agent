@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { scheduleQuizRetry } from '../../api/client';
+import { track } from '../../lib/analytics';
 import type { QuizAnswer } from '../../stores/chatStore';
 
 export default function QuizResult({
@@ -21,6 +22,12 @@ export default function QuizResult({
   const total = answers.length;
   const pct = Math.round((correct / total) * 100);
   const wrongCount = total - correct;
+
+  // 채점 결과 화면 진입 = 퀴즈 완료 (마운트 시 1회)
+  useEffect(() => {
+    track('quiz_complete', { correct, total, pct });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSchedule = async (date: string, mode: string) => {
     if (!quizResultId || !date) return;
