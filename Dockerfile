@@ -4,6 +4,12 @@ WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
 COPY web/ ./
+# PostHog 계측은 빌드타임 변수 — Railway 서비스 변수를 빌드 ARG로 주입해야
+# 번들에 포함된다 (미설정 시 계측 비활성). phc_ 키는 공개 키라 노출 무방.
+ARG VITE_POSTHOG_KEY=""
+ARG VITE_POSTHOG_HOST=""
+ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY \
+    VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
 RUN npm run build
 
 # --- Stage 2: Python 서버 ---
@@ -24,6 +30,8 @@ RUN uv sync --frozen --no-dev
 # 소스 복사
 COPY tutor_agent/ tutor_agent/
 COPY auth_config.yaml ./
+# 온보딩 샘플 자산(가입 시 샘플 클래스 시딩용 PDF + 사전생성 오디오)
+COPY seeds/ seeds/
 
 # React 빌드 결과 복사
 COPY --from=frontend /app/web/dist web/dist/
