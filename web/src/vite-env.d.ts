@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
 
 interface ImportMetaEnv {
   /** PostHog 프로젝트 API 키. 없으면 계측 전체 비활성(로컬/미설정 환경에서 무동작). */

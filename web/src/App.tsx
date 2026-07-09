@@ -3,6 +3,7 @@ import { useAuthStore } from './stores/authStore';
 import AuthPage from './components/auth/AuthPage';
 import AppShell from './components/layout/AppShell';
 import ChatArea from './components/chat/ChatArea';
+import IosInstallBanner from './components/pwa/IosInstallBanner';
 
 export default function App() {
   const { user, token, checkAuth } = useAuthStore();
@@ -18,8 +19,11 @@ export default function App() {
   }
 
   return (
-    <AppShell>
-      <ChatArea />
-    </AppShell>
+    <>
+      <AppShell>
+        <ChatArea />
+      </AppShell>
+      <IosInstallBanner />
+    </>
   );
 }

@@ -59,6 +59,19 @@ export default function AudioReader({ classId, materialName }: Props) {
     playCtxRef.current = null;
     if (seconds >= 1) track('listen_session', { ...ctx, seconds });
   }, []);
+
+  // Media Session(T11): 잠금화면 진행바 동기화
+  const updatePositionState = useCallback(() => {
+    if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      position: Math.min(audio.currentTime, audio.duration),
+      playbackRate: audio.playbackRate || 1,
+    });
+  }, []);
+
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -98,6 +111,42 @@ export default function AudioReader({ classId, materialName }: Props) {
     };
   }, [classId, materialName, section, flushListen]);
 
+  // Media Session(T11): 잠금화면·알림센터에 제목·컨트롤 노출. 재생 준비되면 설정.
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || status !== 'ready') return;
+    const ms = navigator.mediaSession;
+    const sectionTitle = sections.find((s) => s.section === section)?.title ?? '';
+    ms.metadata = new MediaMetadata({
+      title: sectionTitle || materialName,
+      artist: 'TutorAgent',
+      album: materialName,
+      artwork: [{ src: '/pwa-512.png', sizes: '512x512', type: 'image/png' }],
+    });
+    const skip = (delta: number) => {
+      const a = audioRef.current;
+      if (!a) return;
+      a.currentTime = Math.max(0, Math.min(a.duration || 0, a.currentTime + delta));
+      updatePositionState();
+    };
+    ms.setActionHandler('play', () => audioRef.current?.play());
+    ms.setActionHandler('pause', () => audioRef.current?.pause());
+    ms.setActionHandler('seekbackward', (d) => skip(-(d.seekOffset || 15)));
+    ms.setActionHandler('seekforward', (d) => skip(d.seekOffset || 15));
+    ms.setActionHandler('seekto', (d) => {
+      const a = audioRef.current;
+      if (a && d.seekTime != null) {
+        a.currentTime = d.seekTime;
+        updatePositionState();
+      }
+    });
+    return () => {
+      // 섹션·자료 교체 시 잔존 핸들러 제거
+      (['play', 'pause', 'seekbackward', 'seekforward', 'seekto'] as const).forEach((a) =>
+        ms.setActionHandler(a, null),
+      );
+    };
+  }, [status, section, materialName, sections, updatePositionState]);
+
   const posKey =
     section && audioPositionKey(classId, materialName, section, voice);
 
@@ -115,12 +164,14 @@ export default function AudioReader({ classId, materialName }: Props) {
       autoAdvanceRef.current = false;
       audio.play();
     }
+    updatePositionState();
   };
 
   // 배속 변경을 재생 중인 오디오에 반영
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = rate;
-  }, [rate]);
+    updatePositionState();
+  }, [rate, updatePositionState]);
 
   const handleTimeUpdate = () => {
     const audio = audioRef.current;
@@ -130,6 +181,7 @@ export default function AudioReader({ classId, materialName }: Props) {
     if (posKey) localStorage.setItem(posKey, String(t));
     const idx = manifest.chunks.findIndex((c) => t >= c.start && t < c.end);
     if (idx >= 0) setCurrentChunk(idx);
+    updatePositionState();
   };
 
   // 현재 청크 하이라이트 따라 자동 스크롤
@@ -352,6 +404,8 @@ export default function AudioReader({ classId, materialName }: Props) {
             onTimeUpdate={handleTimeUpdate}
             onPlay={() => {
               setPlaying(true);
+              if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+              updatePositionState();
               if (playStartRef.current == null) {
                 playStartRef.current = Date.now();
                 playCtxRef.current = {
@@ -373,6 +427,7 @@ export default function AudioReader({ classId, materialName }: Props) {
             }}
             onPause={() => {
               setPlaying(false);
+              if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
               flushListen();
             }}
             onEnded={handleEnded}
