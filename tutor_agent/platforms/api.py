@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from ..auth import (
@@ -61,6 +62,7 @@ from ..service import (
     upload_material,
 )
 from ..tts import DEFAULT_VOICE, VOICES
+from ..onboarding import seed_sample_class
 from ..usage import add_usage, check_limit
 from .slack import slack_handler
 
@@ -160,6 +162,8 @@ async def register(body: RegisterRequest):
         user = create_user(body.email, body.password, body.name)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    # 가입 즉시 샘플 클래스(낭독 체험) 시딩 — 업로드 전 활성화율 부양 (T10)
+    seed_sample_class(user["email"])
     token = create_access_token(user["email"])
     return {"token": token, "user": user}
 
@@ -770,6 +774,20 @@ async def generate_scheduled_quizzes(secret: str = ""):
 
 # --- Static Files (프로덕션: React 빌드 서빙) ---
 
+
+class _SPAStaticFiles(StaticFiles):
+    """클라이언트 라우팅(react-router) 폴백: 없는 경로는 index.html을 반환한다.
+    /api/* 는 폴백하지 않아 API 404가 HTML로 가려지지 않게 한다."""
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and not path.startswith("api"):
+                return await super().get_response("index.html", scope)
+            raise
+
+
 _web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
 if _web_dist.exists():
-    app.mount("/", StaticFiles(directory=str(_web_dist), html=True), name="static")
+    app.mount("/", _SPAStaticFiles(directory=str(_web_dist), html=True), name="static")
