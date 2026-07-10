@@ -646,6 +646,62 @@ def _audio_error_message(e: Exception) -> str:
     return "오디오 생성 중 오류가 발생했습니다. 다시 시도해 주세요."
 
 
+_NARRATION_REFINE_PROMPT = (
+    "다음은 PDF 강의자료에서 추출한 한국어 텍스트입니다. 추출 과정에서 단어가 "
+    "잘못 띄어쓰기되거나(예: '풍 과' → '풍과'), 줄바꿈으로 끊겼습니다"
+    "(예: '합 성어' → '합성어'). 낭독용으로 띄어쓰기를 교정하세요.\n"
+    "규칙:\n"
+    "- 잘못 분리된 단어·어절을 올바르게 붙이세요.\n"
+    "- 각주 번호, 쪽번호, 표 기호는 제거하세요.\n"
+    "- **내용은 절대 바꾸거나 요약·추가하지 마세요. 원문 문장을 그대로 유지**하되 "
+    "띄어쓰기만 교정합니다.\n"
+    "- 정제된 본문 텍스트만 출력하세요(설명·머리말 없이).\n\n"
+    "원문:\n"
+)
+
+
+def _refine_narration_text(text: str) -> str:
+    """Gemini로 낭독 텍스트의 잘못된 띄어쓰기·단어 분리를 교정합니다.
+
+    슬라이드형 PDF는 인라인 한자 병기가 어절 중간에 물리적 공간을 차지해
+    "풍(風)과"가 "풍 과"로 추출된다. 기하학적 추출로는 복구 불가하므로
+    한국어를 이해하는 LLM으로 붙인다. **내용 유실 방지가 최우선**이라
+    빈 응답·과도한 축약·예외 시 원문(regex 정제본)을 그대로 반환한다.
+    """
+    text = text.strip()
+    if len(text) < 20:  # 짧으면 정제 이득 없음
+        return text
+    try:
+        from google.genai import types
+
+        client = get_genai_client()
+        # thinking 비활성 — 단순 띄어쓰기 교정이라 추론 불필요.
+        # 켜면 페이지당 ~7초→끄면 ~1초(품질 동일), 섹션 생성 지연을 막는다.
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        )
+        out = ""
+        for _ in range(2):  # 간헐적 빈 응답 1회 재시도 (stream_chat과 동일 패턴)
+            resp = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=_NARRATION_REFINE_PROMPT + text,
+                config=config,
+            )
+            out = (resp.text or "").strip()
+            if out:
+                break
+        # 가드레일: 빈 응답 또는 과도 축약(내용 유실 의심)이면 원문 사용
+        if len(out) < len(text) * 0.6:
+            logger.warning(
+                f"낭독 정제 결과가 과도하게 짧음({len(out)}/{len(text)}) — 원문 사용"
+            )
+            return text
+        return out
+    except Exception:
+        logger.exception("낭독 정제 실패 — 원문 사용")
+        return text
+
+
 def generate_audio_asset(
     user_id: str, class_id: str, material_name: str, section: str, voice: str
 ):
@@ -678,7 +734,9 @@ def generate_audio_asset(
 
         reader = PdfReader(str(pdf_path))
         start, end = pages
-        chunks = build_narration_chunks_paged(_extract_body_pages(reader, start, end))
+        chunks = build_narration_chunks_paged(
+            _extract_body_pages(reader, start, end), refine=_refine_narration_text
+        )
         if not chunks:
             return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
 

@@ -294,3 +294,25 @@ def test_전체_파이프라인():
         "해와 달이 서로 의지하며 변화한다는 뜻입니다.",
         "도마뱀은 주위 상황에 따라 변화하며 적응합니다.",
     ]
+
+
+# --- refine 콜백 (LLM 정제 주입점) ---
+
+
+def test_refine_콜백이_정제텍스트에_적용된다():
+    # 슬라이드 PDF의 잘못된 띄어쓰기를 LLM이 붙이는 지점을 fake로 검증
+    pages = [(1, "풍 과 수 로서 바람과 물을 의미한다.")]
+    chunks = build_narration_chunks_paged(
+        pages, refine=lambda t: t.replace("풍 과 수 로서", "풍과 수로서")
+    )
+    sents = [s for c in chunks for s in c["sentences"]]
+    assert any("풍과 수로서" in s for s in sents)
+    assert not any("풍 과 수" in s for s in sents)
+
+
+def test_refine_없으면_regex_정제만_적용():
+    pages = [(1, "풍 과 수 로서 바람과 물을 의미한다.")]
+    chunks = build_narration_chunks_paged(pages)
+    sents = [s for c in chunks for s in c["sentences"]]
+    # refine 미주입 시 기존 동작 유지 (잘못된 띄어쓰기 그대로)
+    assert any("풍 과 수 로서" in s for s in sents)

@@ -8,6 +8,7 @@ tts-demo에서 검증된 규칙을 순수 함수로 구현합니다:
 """
 
 import re
+from collections.abc import Callable
 
 # 한자: 기본 영역(U+4E00-9FFF) + 확장 A(U+3400-4DBF) + 호환 한자(U+F900-FAFF)
 # — 호환 영역은 옛 문헌 PDF에서 宅(U+FA04)·李(U+F9E1)처럼 실제로 등장한다
@@ -227,11 +228,15 @@ def build_narration_chunks(raw_text: str) -> list[list[str]]:
 
 def build_narration_chunks_paged(
     page_texts: list[tuple[int, str]],
+    refine: Callable[[str], str] | None = None,
 ) -> list[dict]:
     """페이지별 원문에서 페이지 정보가 붙은 낭독 청크를 생성합니다.
 
     Args:
         page_texts: (페이지 번호(1-based), 페이지 텍스트) 목록
+        refine: 정제된 페이지 텍스트를 받아 추가 교정(잘못된 띄어쓰기·단어
+            분리 복원)한 문자열을 돌려주는 선택적 콜백. LLM 정제를 주입해
+            순수 모듈로서의 테스트 가능성을 유지한다. None이면 regex 정제만.
 
     Returns:
         [{"sentences": [...], "page": 첫 문장의 페이지 번호}] — PDF 뷰의
@@ -239,7 +244,10 @@ def build_narration_chunks_paged(
     """
     sent_pages: list[tuple[str, int]] = []
     for page_no, text in page_texts:
-        for sent in split_sentences(clean_text(text)):
+        cleaned = clean_text(text)
+        if refine is not None:
+            cleaned = refine(cleaned)
+        for sent in split_sentences(cleaned):
             # 페이지 경계에서 끊긴 문장 이어붙이기: 직전 페이지의 마지막
             # 문장이 종결부호 없이 끝났으면 다음 페이지 첫 문장과 한 문장이다
             if (
