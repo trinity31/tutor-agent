@@ -147,6 +147,9 @@ export default function ChatArea() {
             onSend={handleSend}
             hasClasses={classes.length > 0}
             selectedClassId={selectedClassId}
+            onOpenIndex={
+              indexableMaterial ? () => setIndexPanelOpen(true) : undefined
+            }
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
@@ -209,7 +212,7 @@ export default function ChatArea() {
           disabled={isStreaming}
           placeholder={
             !selectedClassId
-              ? '사이드바에서 클래스를 선택해 주세요'
+              ? '클래스를 먼저 선택해 주세요'
               : '메시지를 입력하세요'
           }
           inputDisabled={!selectedClassId}

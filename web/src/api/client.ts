@@ -117,6 +117,12 @@ export async function getCompletedMaterials(classId: string) {
   return apiGet<{ materials: string[] }>(`/classes/${classId}/completed-materials`);
 }
 
+export async function getMaterialStatus(classId: string) {
+  return apiGet<{ completed: string[]; in_progress: string[] }>(
+    `/classes/${classId}/material-status`,
+  );
+}
+
 // --- Material Index ---
 
 export async function getMaterialIndex(classId: string, materialName: string) {

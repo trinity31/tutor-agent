@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   markComplete,
-  getCompletedMaterials,
+  getMaterialStatus,
   saveStudyNote,
   getStudyNotes,
   deleteStudyNote,
@@ -36,6 +36,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
   // 자료별 상태
   const [completedMaterials, setCompletedMaterials] = useState<string[]>([]);
+  const [inProgressMaterials, setInProgressMaterials] = useState<string[]>([]);
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [noteText, setNoteText] = useState('');
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
@@ -49,14 +50,21 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     loadClasses();
   }, [loadClasses]);
 
-  // 클래스 변경 시 완료 목록 로드
+  // 클래스 변경 시 자료별 상태(완료/학습중) 로드
   useEffect(() => {
     if (selectedClassId) {
-      getCompletedMaterials(selectedClassId)
-        .then((res) => setCompletedMaterials(res.materials))
-        .catch(() => setCompletedMaterials([]));
+      getMaterialStatus(selectedClassId)
+        .then((res) => {
+          setCompletedMaterials(res.completed);
+          setInProgressMaterials(res.in_progress);
+        })
+        .catch(() => {
+          setCompletedMaterials([]);
+          setInProgressMaterials([]);
+        });
     } else {
       setCompletedMaterials([]);
+      setInProgressMaterials([]);
     }
   }, [selectedClassId]);
 
@@ -134,6 +142,12 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     setNoteSaving(false);
   };
 
+  // 이름 미설정(백엔드가 name을 email로 저장) 시 이메일 아이디를 이름으로
+  const displayName =
+    user?.name && user.name !== user.email
+      ? user.name
+      : (user?.email?.split('@')[0] ?? '');
+
   return (
     <>
       {open && (
@@ -145,17 +159,21 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-warm-100 px-5 py-4">
-          <div>
-            <p className="text-sm font-semibold text-warm-900">{user?.name || user?.email}</p>
-            <p className="text-xs text-warm-500">{user?.email}</p>
+        {/* 계정: 아바타 + 이름 + 이메일 + 로그아웃 (이름 없으면 이메일 아이디로) */}
+        <div className="flex items-center gap-2.5 border-b border-warm-100 px-4 py-3.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-100 text-sm font-bold text-primary-600">
+            {(displayName || '·').charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-warm-900">{displayName}</p>
+            <p className="truncate text-xs text-warm-500">{user?.email}</p>
           </div>
           <button
             onClick={logout}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-warm-500 hover:bg-warm-100 hover:text-warm-700 transition-colors"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-warm-400 hover:bg-warm-100 hover:text-warm-700 transition-colors"
+            title="로그아웃"
           >
-            로그아웃
+            ⏻
           </button>
         </div>
 
@@ -240,6 +258,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                         <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
                       </svg>
                       <span className="truncate">{cls.name}</span>
+                      {isSelected && materials.length > 0 && (
+                        <span
+                          className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${
+                            isSelected ? 'bg-white text-primary-600' : 'bg-warm-100 text-warm-500'
+                          }`}
+                        >
+                          {completedMaterials.length}/{materials.length}
+                        </span>
+                      )}
                     </button>
 
                     {/* Expanded: materials */}
@@ -252,65 +279,58 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
                           return (
                             <div key={name}>
-                              {/* 자료 행: 선택 + 이름 + 액션 버튼 */}
+                              {/* 자료 행: 이름 + 상태 배지 하나 + 메모 아이콘 */}
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => !isIndexing && toggleMaterial(name)}
-                                  className={`flex flex-1 items-center gap-2 text-left rounded-md px-3 py-1.5 text-xs truncate transition-colors ${
+                                  className={`flex flex-1 items-center truncate rounded-md px-3 py-2 text-[13px] text-left transition-colors ${
                                     isIndexing
                                       ? 'text-warm-400 cursor-wait'
                                       : isChecked
-                                        ? 'bg-primary-100 text-primary-700 font-medium'
+                                        ? 'bg-primary-50 font-bold text-warm-900'
                                         : 'text-warm-600 hover:bg-warm-50'
                                   }`}
                                   title={isIndexing ? '인덱싱 중...' : name}
                                 >
-                                  <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                    isChecked && !isIndexing ? 'bg-primary-500 border-primary-500' : 'border-warm-300'
-                                  }`}>
-                                    {isChecked && !isIndexing && (
-                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                        <path d="M1.5 4l2 2 3-3.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    )}
-                                  </span>
                                   <span className="truncate">{name}</span>
-                                  {isIndexing && (
-                                    <span className="ml-auto shrink-0 text-xs text-amber-500 animate-pulse">
-                                      인덱싱 중
-                                    </span>
-                                  )}
                                 </button>
 
-                                {/* 학습 완료 버튼 */}
-                                {isChecked && !isCompleted && (
+                                {/* 상태 배지 — 미완료는 탭하면 학습 완료 처리 */}
+                                {isIndexing ? (
+                                  <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-500 animate-pulse">
+                                    인덱싱
+                                  </span>
+                                ) : isCompleted ? (
+                                  <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-bold text-primary-600">
+                                    완료
+                                  </span>
+                                ) : (
                                   <button
                                     onClick={() => handleMarkComplete(cls.id, name)}
                                     disabled={completingMaterial === name}
-                                    className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                      completingMaterial === name
-                                        ? 'text-amber-400 cursor-wait'
-                                        : 'text-amber-600 hover:bg-amber-50'
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                                      inProgressMaterials.includes(name)
+                                        ? 'bg-accent-50 text-accent-500'
+                                        : 'bg-warm-100 text-warm-400'
                                     }`}
-                                    title="학습 완료 등록"
+                                    title="탭하여 학습 완료로 표시"
                                   >
-                                    {completingMaterial === name ? '처리 중...' : '완료'}
+                                    {completingMaterial === name
+                                      ? '처리중'
+                                      : inProgressMaterials.includes(name)
+                                        ? '학습중'
+                                        : '미시작'}
                                   </button>
                                 )}
-                                {isCompleted && (
-                                  <span className="shrink-0 text-xs text-success-500 font-medium px-1.5">
-                                    완료
-                                  </span>
-                                )}
 
-                                {/* 노트 버튼 */}
+                                {/* 메모 */}
                                 {isChecked && (
                                   <button
                                     onClick={() => setShowNoteFor(showNoteFor === name ? null : name)}
-                                    className="shrink-0 rounded px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
-                                    title="노트 추가"
+                                    className="shrink-0 px-1.5 py-0.5 text-base text-primary-600 hover:text-primary-700 transition-colors"
+                                    title="메모"
                                   >
-                                    메모
+                                    ✎
                                   </button>
                                 )}
                               </div>

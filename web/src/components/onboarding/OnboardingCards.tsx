@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet } from "../../api/client";
 import { useClassStore } from "../../stores/classStore";
+import { useUIStore } from "../../stores/uiStore";
 
 const CARDS = [
   {
@@ -34,10 +35,10 @@ const CARDS = [
   {
     type: "quiz",
     title: "퀴즈",
-    desc: "학습자료 기반 퀴즈를 풀어보세요",
+    desc: "이번 차시 내용을 문제로 점검해요",
     fallback: "이 강의자료의 내용을 바탕으로 퀴즈를 내주세요",
-    color: "bg-success-400/10 border-success-400/30",
-    iconBg: "bg-success-500",
+    color: "bg-[#5b8def]/10 border-[#5b8def]/25",
+    iconBg: "bg-[#5b8def]",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
         <rect x="4" y="4" width="16" height="16" rx="3" stroke="white" strokeWidth="1.5" />
@@ -51,11 +52,14 @@ export default function OnboardingCards({
   onSend,
   hasClasses,
   selectedClassId,
+  onOpenIndex,
 }: {
   onSend: (text: string) => void;
   hasClasses: boolean;
   selectedClassId: string | null;
+  onOpenIndex?: () => void;
 }) {
+  const openSidebar = useUIStore((s) => s.openSidebar);
   const { createClass, selectClass, materials, selectedMaterials, uploadMaterial } = useClassStore();
   const [examples, setExamples] = useState<Record<string, string>>({});
   const [loadingExamples, setLoadingExamples] = useState(false);
@@ -133,19 +137,25 @@ export default function OnboardingCards({
     );
   }
 
-  // 클래스는 있지만 선택 안 됨
+  // 클래스는 있지만 선택 안 됨 — 실행 가능한 CTA (모바일엔 사이드바가 없으므로)
   if (!selectedClassId) {
     return (
-      <div className="mx-auto max-w-md px-4 py-12 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500 text-2xl font-bold text-white">
+      <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-12 text-center">
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[20px] bg-primary-500 text-3xl font-bold text-white shadow-[0_10px_22px_-8px_rgba(18,184,134,0.6)]">
           T
         </div>
-        <h2 className="text-xl font-bold text-warm-900">클래스를 선택해 주세요</h2>
-        <p className="mt-2 text-sm text-warm-500">
-          왼쪽 사이드바에서 클래스를 선택하면
+        <h2 className="text-xl font-bold text-warm-900">어떤 수업을 공부할까요?</h2>
+        <p className="mt-2 mb-6 text-sm leading-relaxed text-warm-500">
+          클래스를 고르면 그 강의 자료를 바탕으로
           <br />
-          해당 강의자료 기반으로 학습을 시작할 수 있어요.
+          과외·Q&amp;A·퀴즈를 바로 시작할 수 있어요.
         </p>
+        <button
+          onClick={openSidebar}
+          className="flex h-[52px] items-center rounded-2xl bg-primary-500 px-7 text-base font-bold text-white shadow-[0_8px_18px_-6px_rgba(18,184,134,0.6)] transition-transform active:scale-[0.98]"
+        >
+          클래스 선택하기
+        </button>
       </div>
     );
   }
@@ -204,20 +214,15 @@ export default function OnboardingCards({
     );
   }
 
-  // 클래스 + 자료 있음: 기존 3개 카드
+  // 클래스 + 자료 있음: 카드 (가로형·축소, 4개가 한눈에)
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500 text-2xl font-bold text-white">
-          T
-        </div>
-        <h2 className="text-xl font-bold text-warm-900">무엇을 도와드릴까요?</h2>
-        <p className="mt-2 text-sm text-warm-500">
-          아래 카드를 눌러 시작하거나, 직접 메시지를 입력해 보세요
-        </p>
+    <div className="mx-auto max-w-xl px-4 py-8">
+      <div className="mb-6 text-center">
+        <h2 className="text-lg font-bold text-warm-900">무엇을 도와드릴까요?</h2>
+        <p className="mt-1 text-[13px] text-warm-400">아래를 누르거나 바로 질문해 보세요</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="space-y-2.5">
         {CARDS.map((card) => {
           const isQna = card.type === "qna";
           const message = isQna
@@ -229,26 +234,38 @@ export default function OnboardingCards({
               key={card.type}
               onClick={() => !isLoading && onSend(message)}
               disabled={isLoading}
-              className={`group flex flex-col items-start rounded-2xl border p-5 text-left transition-all hover:scale-[1.02] hover:shadow-md active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait ${card.color}`}
+              className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-70 disabled:cursor-wait ${card.color}`}
             >
-              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${card.iconBg}`}>
+              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${card.iconBg}`}>
                 {card.icon}
               </div>
-              <h3 className="mb-1 text-sm font-bold text-warm-900">{card.title}</h3>
-              <p className="mb-3 text-xs text-warm-500 leading-relaxed">{card.desc}</p>
-              <p className="text-xs font-medium text-warm-600 group-hover:text-primary-600 transition-colors">
-                {isLoading ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-warm-400" />
-                    질문 생성 중...
-                  </span>
-                ) : (
-                  <>&ldquo;{message}&rdquo;</>
-                )}
-              </p>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[15px] font-extrabold text-warm-900">{card.title}</h3>
+                <p className="truncate text-xs text-warm-500">
+                  {isLoading ? "질문 생성 중..." : card.desc}
+                </p>
+              </div>
+              <span className="text-lg text-warm-300">›</span>
             </button>
           );
         })}
+
+        {/* 인덱스 · 듣기 (자료 선택 시) */}
+        {onOpenIndex && (
+          <button
+            onClick={onOpenIndex}
+            className="flex w-full items-center gap-3 rounded-2xl border border-[#a06ff0]/25 bg-[#a06ff0]/10 p-3.5 text-left transition-all active:scale-[0.99]"
+          >
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#a06ff0] text-lg">
+              🎧
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[15px] font-extrabold text-warm-900">인덱스 · 듣기</h3>
+              <p className="truncate text-xs text-warm-500">핵심 목차를 보거나 원문을 낭독해요</p>
+            </div>
+            <span className="text-lg text-warm-300">›</span>
+          </button>
+        )}
       </div>
     </div>
   );

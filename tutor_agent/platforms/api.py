@@ -31,6 +31,7 @@ from ..auth import (
     get_class,
     get_classes,
     get_completed_materials,
+    get_material_activity,
     get_quiz_result,
     get_quiz_results,
     get_study_notes,
@@ -719,6 +720,12 @@ async def mark_complete(body: MarkCompleteRequest, user: dict = Depends(get_curr
 async def list_completed_materials(class_id: str, user: dict = Depends(get_current_user)):
     """학습 완료된 자료명 목록을 반환합니다."""
     return {"materials": get_completed_materials(user["email"], class_id)}
+
+
+@app.get("/api/classes/{class_id}/material-status")
+async def material_status(class_id: str, user: dict = Depends(get_current_user)):
+    """자료별 학습 상태(완료/학습중) 집합을 반환합니다."""
+    return get_material_activity(user["email"], class_id)
 
 
 # --- Study Notes Endpoints ---

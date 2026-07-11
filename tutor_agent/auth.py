@@ -516,6 +516,40 @@ def get_completed_materials(user_email: str, class_id: str) -> list[str]:
         conn.close()
 
 
+def get_material_activity(user_email: str, class_id: str) -> dict:
+    """자료별 학습 상태 계산용 집합을 반환합니다.
+
+    completed: 학습 완료(completions) 자료.
+    in_progress: 완료는 아니지만 퀴즈·노트 활동이 있는 자료.
+    (둘 다 아닌 자료는 프론트에서 '미시작'으로 처리)
+    """
+    email = user_email.lower()
+    conn = _get_db()
+    try:
+        completed = {
+            r["material_name"]
+            for r in conn.execute(
+                "SELECT DISTINCT material_name FROM completions WHERE user_email=? AND class_id=?",
+                (email, class_id),
+            )
+        }
+        active: set[str] = set()
+        for tbl in ("quiz_results", "study_notes"):
+            active |= {
+                r["material_name"]
+                for r in conn.execute(
+                    f"SELECT DISTINCT material_name FROM {tbl} WHERE user_email=? AND class_id=?",
+                    (email, class_id),
+                )
+            }
+        active -= completed
+        completed.discard("")
+        active.discard("")
+        return {"completed": sorted(completed), "in_progress": sorted(active)}
+    finally:
+        conn.close()
+
+
 def mark_completion_generated(completion_id: str, quiz_id: str):
     """completion을 퀴즈 생성 완료로 표시합니다."""
     conn = _get_db()
