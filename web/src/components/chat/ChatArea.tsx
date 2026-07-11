@@ -131,7 +131,7 @@ export default function ChatArea() {
           {indexableMaterial && !indexPanelOpen && (
             <button
               onClick={() => setIndexPanelOpen(true)}
-              className="ml-auto rounded-md border border-primary-200 bg-white px-2 py-0.5 text-[11px] font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+              className="ml-auto rounded-md border border-primary-200 bg-white px-2.5 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
               title="학습 인덱스·원문 낭독 열기"
             >
               인덱스·듣기

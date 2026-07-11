@@ -276,7 +276,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                   </span>
                                   <span className="truncate">{name}</span>
                                   {isIndexing && (
-                                    <span className="ml-auto shrink-0 text-[10px] text-amber-500 animate-pulse">
+                                    <span className="ml-auto shrink-0 text-xs text-amber-500 animate-pulse">
                                       인덱싱 중
                                     </span>
                                   )}
@@ -287,7 +287,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                   <button
                                     onClick={() => handleMarkComplete(cls.id, name)}
                                     disabled={completingMaterial === name}
-                                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                                    className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
                                       completingMaterial === name
                                         ? 'text-amber-400 cursor-wait'
                                         : 'text-amber-600 hover:bg-amber-50'
@@ -298,7 +298,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                   </button>
                                 )}
                                 {isCompleted && (
-                                  <span className="shrink-0 text-[10px] text-success-500 font-medium px-1.5">
+                                  <span className="shrink-0 text-xs text-success-500 font-medium px-1.5">
                                     완료
                                   </span>
                                 )}
@@ -307,7 +307,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                 {isChecked && (
                                   <button
                                     onClick={() => setShowNoteFor(showNoteFor === name ? null : name)}
-                                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+                                    className="shrink-0 rounded px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
                                     title="노트 추가"
                                   >
                                     메모
@@ -357,7 +357,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                             onClick={() => setExpandedNoteId(isExpNote ? null : n.id)}
                                             className="flex flex-1 items-center gap-1 text-left min-w-0"
                                           >
-                                            <span className="text-[10px] text-warm-400 shrink-0">{isExpNote ? '▾' : '▸'}</span>
+                                            <span className="text-xs text-warm-400 shrink-0">{isExpNote ? '▾' : '▸'}</span>
                                             <p className="flex-1 text-xs text-warm-600 truncate">{n.content}</p>
                                           </button>
                                           <button
@@ -365,7 +365,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                               await deleteStudyNote(n.id);
                                               setNotes((prev) => prev.filter((x) => x.id !== n.id));
                                             }}
-                                            className="shrink-0 text-warm-400 opacity-0 group-hover:opacity-100 hover:text-error-500 transition-all text-[10px]"
+                                            className="shrink-0 px-1 text-sm text-warm-300 hover:text-error-500 transition-colors"
                                             title="삭제"
                                           >
                                             ✕
