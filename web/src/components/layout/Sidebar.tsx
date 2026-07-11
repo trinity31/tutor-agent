@@ -93,9 +93,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     if (expandedId === classId) {
       setExpandedId(null);
     } else {
+      // 클래스 선택 시엔 자료 목록을 펼치기만 하고 모달은 유지 — 닫기는 자료 선택 시에만
       setExpandedId(classId);
       selectClass(classId);
-      onClose(); // 모바일: 클래스 선택 시 모달 닫기 (데스크톱 고정 사이드바는 무영향)
     }
   };
 
