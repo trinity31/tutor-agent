@@ -95,6 +95,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     } else {
       setExpandedId(classId);
       selectClass(classId);
+      onClose(); // 모바일: 클래스 선택 시 모달 닫기 (데스크톱 고정 사이드바는 무영향)
     }
   };
 
@@ -291,7 +292,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                               {/* 자료 행: 이름 + 상태 배지 하나 + 메모 아이콘 */}
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => !isIndexing && toggleMaterial(name)}
+                                  onClick={() => {
+                                    if (isIndexing) return;
+                                    toggleMaterial(name);
+                                    onClose();
+                                  }}
                                   className={`flex flex-1 items-center truncate rounded-md px-3 py-2 text-[13px] text-left transition-colors ${
                                     isIndexing
                                       ? 'text-warm-400 cursor-wait'
