@@ -274,7 +274,7 @@ export default function AudioReader({ classId, materialName }: Props) {
           <select
             value={section ?? ''}
             onChange={(e) => selectSection(e.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-warm-200 bg-white px-2 py-1 text-xs text-warm-700"
+            className="min-w-0 flex-1 rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs text-warm-700"
           >
             {sections.map((s) => (
               <option key={s.section} value={s.section}>
@@ -286,7 +286,7 @@ export default function AudioReader({ classId, materialName }: Props) {
         <select
           value={voice}
           onChange={(e) => setVoice(e.target.value)}
-          className="rounded-md border border-warm-200 bg-white px-2 py-1 text-xs text-warm-700"
+          className="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs text-warm-700"
           title="음성 선택"
         >
           {Object.entries(voices).map(([name, label]) => (
@@ -297,7 +297,7 @@ export default function AudioReader({ classId, materialName }: Props) {
         </select>
         <button
           onClick={toggleView}
-          className="shrink-0 rounded-md border border-warm-200 bg-white px-2 py-1 text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors"
+          className="shrink-0 rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors"
           title={viewMode === 'pdf' ? '낭독 텍스트 보기' : 'PDF 원본 보기'}
         >
           {viewMode === 'pdf' ? '📝 텍스트' : '📄 원본'}
@@ -307,7 +307,7 @@ export default function AudioReader({ classId, materialName }: Props) {
             <button
               onClick={() => stepFont(-1)}
               disabled={fontSize <= FONT_SIZES[0]}
-              className="px-1.5 py-1 text-[11px] text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+              className="px-2.5 py-1.5 text-sm text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
               title="글자 작게"
             >
               A−
@@ -315,7 +315,7 @@ export default function AudioReader({ classId, materialName }: Props) {
             <button
               onClick={() => stepFont(1)}
               disabled={fontSize >= FONT_SIZES[FONT_SIZES.length - 1]}
-              className="border-l border-warm-200 px-1.5 py-1 text-[13px] text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+              className="border-l border-warm-200 px-2.5 py-1.5 text-sm text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
               title="글자 크게"
             >
               A+
@@ -434,8 +434,8 @@ export default function AudioReader({ classId, materialName }: Props) {
             onEnded={handleEnded}
           />
           {/* 진행바 */}
-          <div className="mb-2 flex items-center gap-2">
-            <span className="w-10 text-right text-[10px] tabular-nums text-warm-500">
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="w-11 text-right text-xs tabular-nums text-warm-500">
               {formatTime(currentTime)}
             </span>
             <input
@@ -445,20 +445,20 @@ export default function AudioReader({ classId, materialName }: Props) {
               step={0.1}
               value={currentTime}
               onChange={(e) => seekTo(Number(e.target.value))}
-              className="flex-1 accent-primary-500"
+              className="h-1.5 flex-1 accent-primary-500"
             />
-            <span className="w-10 text-[10px] tabular-nums text-warm-500">
+            <span className="w-11 text-xs tabular-nums text-warm-500">
               {formatTime(duration || manifest?.duration || 0)}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={togglePlay}
-              className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 transition-colors"
+              className="rounded-full bg-primary-500 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
             >
               {playing ? '⏸ 일시정지' : '▶ 재생'}
             </button>
-            <div className="flex flex-1 items-center gap-1.5 text-[10px] text-warm-500">
+            <div className="flex flex-1 items-center gap-1.5 text-xs text-warm-500">
               <span>배속</span>
               <input
                 type="range"
@@ -467,12 +467,12 @@ export default function AudioReader({ classId, materialName }: Props) {
                 step={0.1}
                 value={rate}
                 onChange={(e) => setRate(Number(e.target.value))}
-                className="w-20 accent-primary-500"
+                className="h-1.5 w-24 accent-primary-500"
               />
               <span className="tabular-nums">{rate.toFixed(1)}×</span>
             </div>
             {currentChunk >= 0 && manifest && (
-              <span className="text-[10px] tabular-nums text-warm-400">
+              <span className="text-xs tabular-nums text-warm-400">
                 {currentChunk + 1}/{manifest.chunks.length}
               </span>
             )}
