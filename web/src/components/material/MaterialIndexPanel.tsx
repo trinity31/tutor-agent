@@ -73,13 +73,6 @@ export default function MaterialIndexPanel({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            onClick={() => setMode(mode === 'audio' ? 'index' : 'audio')}
-            className="rounded-md px-2 py-1 text-xs font-medium text-warm-500 hover:bg-warm-100 hover:text-warm-700 transition-colors"
-            title={mode === 'audio' ? '학습 인덱스 보기' : '원문 낭독 듣기'}
-          >
-            {mode === 'audio' ? '📑 인덱스' : '🎧 듣기'}
-          </button>
           {mode === 'index' && status === 'ready' && (
             <button
               onClick={handleRegenerate}

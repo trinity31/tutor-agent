@@ -155,11 +155,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       )}
 
       <aside
-        className={`fixed z-40 flex h-dvh w-72 flex-col border-r border-warm-200 bg-white transition-transform duration-200 md:relative md:translate-x-0 ${
+        className={`fixed z-40 flex h-dvh w-full flex-col border-r border-warm-200 bg-white transition-transform duration-200 md:relative md:w-72 md:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* 계정: 아바타 + 이름 + 이메일 + 로그아웃 (이름 없으면 이메일 아이디로) */}
+        {/* 계정: 아바타 + 이름 + 이메일 + (모바일 닫기) + 로그아웃 */}
         <div className="flex items-center gap-2.5 border-b border-warm-100 px-4 py-3.5">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-100 text-sm font-bold text-primary-600">
             {(displayName || '·').charAt(0).toUpperCase()}
@@ -168,6 +168,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             <p className="truncate text-sm font-bold text-warm-900">{displayName}</p>
             <p className="truncate text-xs text-warm-500">{user?.email}</p>
           </div>
+          <button
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-warm-500 hover:bg-warm-100 hover:text-warm-800 transition-colors md:hidden"
+            title="닫기"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M5 5l8 8M13 5l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
           <button
             onClick={logout}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-warm-400 hover:bg-warm-100 hover:text-warm-700 transition-colors"
