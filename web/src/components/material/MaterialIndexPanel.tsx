@@ -7,17 +7,24 @@ interface Props {
   classId: string;
   materialName: string;
   onClose: () => void;
+  /** 패널이 처음 열릴 때 보여줄 모드 (인덱스/듣기 카드에서 지정) */
+  initialMode?: 'index' | 'audio';
 }
 
-export default function MaterialIndexPanel({ classId, materialName, onClose }: Props) {
+export default function MaterialIndexPanel({
+  classId,
+  materialName,
+  onClose,
+  initialMode = 'index',
+}: Props) {
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'not_ready' | 'error'>('loading');
   const [regenerating, setRegenerating] = useState(false);
-  const [mode, setMode] = useState<'index' | 'audio'>('index');
+  const [mode, setMode] = useState<'index' | 'audio'>(initialMode);
 
   useEffect(() => {
-    setMode('index');
-  }, [classId, materialName]);
+    setMode(initialMode);
+  }, [classId, materialName, initialMode]);
 
   useEffect(() => {
     let cancelled = false;

@@ -57,7 +57,7 @@ export default function OnboardingCards({
   onSend: (text: string) => void;
   hasClasses: boolean;
   selectedClassId: string | null;
-  onOpenIndex?: () => void;
+  onOpenIndex?: (mode: 'index' | 'audio') => void;
 }) {
   const openSidebar = useUIStore((s) => s.openSidebar);
   const { createClass, selectClass, materials, selectedMaterials, uploadMaterial } = useClassStore();
@@ -250,21 +250,36 @@ export default function OnboardingCards({
           );
         })}
 
-        {/* 인덱스 · 듣기 (자료 선택 시) */}
+        {/* 인덱스 / 듣기 — 자료 선택 시 (서로 다른 모드로 분리) */}
         {onOpenIndex && (
-          <button
-            onClick={onOpenIndex}
-            className="flex w-full items-center gap-3 rounded-2xl border border-[#a06ff0]/25 bg-[#a06ff0]/10 p-3.5 text-left transition-all active:scale-[0.99]"
-          >
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#a06ff0] text-lg">
-              🎧
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-[15px] font-extrabold text-warm-900">인덱스 · 듣기</h3>
-              <p className="truncate text-xs text-warm-500">핵심 목차를 보거나 원문을 낭독해요</p>
-            </div>
-            <span className="text-lg text-warm-300">›</span>
-          </button>
+          <>
+            <button
+              onClick={() => onOpenIndex('index')}
+              className="flex w-full items-center gap-3 rounded-2xl border border-[#a06ff0]/25 bg-[#a06ff0]/10 p-3.5 text-left transition-all active:scale-[0.99]"
+            >
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#a06ff0] text-lg">
+                📑
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[15px] font-extrabold text-warm-900">인덱스</h3>
+                <p className="truncate text-xs text-warm-500">핵심 목차로 이번 차시를 한눈에</p>
+              </div>
+              <span className="text-lg text-warm-300">›</span>
+            </button>
+            <button
+              onClick={() => onOpenIndex('audio')}
+              className="flex w-full items-center gap-3 rounded-2xl border border-[#15aabf]/25 bg-[#15aabf]/10 p-3.5 text-left transition-all active:scale-[0.99]"
+            >
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#15aabf] text-lg">
+                🎧
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[15px] font-extrabold text-warm-900">듣기</h3>
+                <p className="truncate text-xs text-warm-500">원문을 문장 하이라이트와 함께 낭독</p>
+              </div>
+              <span className="text-lg text-warm-300">›</span>
+            </button>
+          </>
         )}
       </div>
     </div>

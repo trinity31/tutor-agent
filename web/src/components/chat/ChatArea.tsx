@@ -32,6 +32,11 @@ export default function ChatArea() {
   const indexableMaterial =
     selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
   const [indexPanelOpen, setIndexPanelOpen] = useState(true);
+  const [panelMode, setPanelMode] = useState<'index' | 'audio'>('index');
+  const openPanel = (mode: 'index' | 'audio') => {
+    setPanelMode(mode);
+    setIndexPanelOpen(true);
+  };
 
   // 모바일(<md)에서는 패널을 전체 화면 오버레이로 띄운다
   const [isMobile, setIsMobile] = useState(
@@ -130,7 +135,7 @@ export default function ChatArea() {
           )}
           {indexableMaterial && !indexPanelOpen && (
             <button
-              onClick={() => setIndexPanelOpen(true)}
+              onClick={() => openPanel('index')}
               className="ml-auto rounded-md border border-primary-200 bg-white px-2.5 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
               title="학습 인덱스·원문 낭독 열기"
             >
@@ -147,9 +152,7 @@ export default function ChatArea() {
             onSend={handleSend}
             hasClasses={classes.length > 0}
             selectedClassId={selectedClassId}
-            onOpenIndex={
-              indexableMaterial ? () => setIndexPanelOpen(true) : undefined
-            }
+            onOpenIndex={indexableMaterial ? openPanel : undefined}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
@@ -229,6 +232,7 @@ export default function ChatArea() {
               classId={selectedClassId}
               materialName={indexableMaterial}
               onClose={() => setIndexPanelOpen(false)}
+              initialMode={panelMode}
             />
           </div>
         ) : (
@@ -243,6 +247,7 @@ export default function ChatArea() {
                 classId={selectedClassId}
                 materialName={indexableMaterial}
                 onClose={() => setIndexPanelOpen(false)}
+                initialMode={panelMode}
               />
             </div>
           </div>
