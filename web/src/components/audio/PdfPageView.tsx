@@ -66,18 +66,18 @@ export default function PdfPageView({
         <button
           onClick={() => setManualPage(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className="rounded-md px-2 py-1 text-xs text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+          className="rounded-md px-2.5 py-1.5 text-xs text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
         >
           ◀ 이전
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] tabular-nums text-warm-500">
+          <span className="text-xs tabular-nums text-warm-500">
             {page} / {numPages || '–'}쪽
           </span>
           {onListenFromPage && manualPage !== null && manualPage !== playbackPage && (
             <button
               onClick={() => onListenFromPage(page)}
-              className="rounded-full bg-primary-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-primary-600 transition-colors"
+              className="rounded-full bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 transition-colors"
             >
               이 페이지부터 듣기
             </button>
@@ -86,7 +86,7 @@ export default function PdfPageView({
         <button
           onClick={() => setManualPage(Math.min(numPages || page, page + 1))}
           disabled={numPages > 0 && page >= numPages}
-          className="rounded-md px-2 py-1 text-xs text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
+          className="rounded-md px-2.5 py-1.5 text-xs text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
         >
           다음 ▶
         </button>
