@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
 import { track } from '../../lib/analytics';
 
@@ -8,6 +8,9 @@ const PdfPageView = lazy(() => import('./PdfPageView'));
 const VIEW_KEY = 'tutor-audio-view';
 const FONT_KEY = 'tutor-audio-font';
 const FONT_SIZES = [14, 16, 18, 20, 22];
+// 배속 프리셋 (슬라이더 대신 시트에서 칩으로 선택)
+const RATE_PRESETS = [0.8, 1, 1.25, 1.5, 2];
+const fmtRate = (r: number) => (Number.isInteger(r) ? r.toFixed(1) : String(r));
 
 interface Props {
   classId: string;
@@ -75,6 +78,7 @@ export default function AudioReader({ classId, materialName }: Props) {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'text' | 'pdf'>(
     () => (localStorage.getItem(VIEW_KEY) === 'pdf' ? 'pdf' : 'text'),
   );
@@ -266,62 +270,57 @@ export default function AudioReader({ classId, materialName }: Props) {
     if (target) seekTo(target.start);
   };
 
+  const skipBy = (delta: number) => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = Math.max(0, Math.min(a.duration || 0, a.currentTime + delta));
+    updatePositionState();
+  };
+
+  // 현재 청크 안에서 재생 시각의 글자 비율로 현재 문장을 추정 (비용 0)
+  const currentSentIdx = useMemo(() => {
+    if (!manifest || currentChunk < 0) return -1;
+    const chunk = manifest.chunks[currentChunk];
+    if (!chunk?.sentences.length) return -1;
+    const span = chunk.end - chunk.start;
+    const ratio = span > 0 ? Math.min(1, Math.max(0, (currentTime - chunk.start) / span)) : 0;
+    const total = chunk.sentences.reduce((n, s) => n + s.length, 0) || 1;
+    let acc = 0;
+    for (let i = 0; i < chunk.sentences.length; i++) {
+      acc += chunk.sentences[i].length;
+      if (ratio <= acc / total) return i;
+    }
+    return chunk.sentences.length - 1;
+  }, [manifest, currentChunk, currentTime]);
+
+  // 배속 칩 활성 표시용 — 현재 배속에 가장 가까운 프리셋
+  const activePreset = RATE_PRESETS.reduce(
+    (a, b) => (Math.abs(b - rate) < Math.abs(a - rate) ? b : a),
+    RATE_PRESETS[0],
+  );
+
   return (
-    <div className="flex h-full flex-col">
-      {/* 섹션·음성 선택 */}
-      <div className="flex items-center gap-2 border-b border-warm-100 bg-white px-4 py-2">
-        {sections.length > 1 && (
-          <select
-            value={section ?? ''}
-            onChange={(e) => selectSection(e.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs text-warm-700"
+    <div className="relative flex h-full flex-col bg-white">
+      {/* 상단: 텍스트 / 원본 세그먼트 (설정은 하단 배속 칩 → 시트로 이동) */}
+      <div className="flex items-center justify-center border-b border-warm-100 bg-white px-4 py-2">
+        <div className="flex rounded-lg bg-warm-100 p-0.5">
+          <button
+            onClick={() => viewMode === 'pdf' && toggleView()}
+            className={`rounded-md px-5 py-1.5 text-sm font-bold transition-colors ${
+              viewMode === 'text' ? 'bg-white text-warm-900 shadow-sm' : 'text-warm-500'
+            }`}
           >
-            {sections.map((s) => (
-              <option key={s.section} value={s.section}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          value={voice}
-          onChange={(e) => setVoice(e.target.value)}
-          className="rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs text-warm-700"
-          title="음성 선택"
-        >
-          {Object.entries(voices).map(([name, label]) => (
-            <option key={name} value={name}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={toggleView}
-          className="shrink-0 rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs font-medium text-warm-600 hover:bg-warm-100 transition-colors"
-          title={viewMode === 'pdf' ? '낭독 텍스트 보기' : 'PDF 원본 보기'}
-        >
-          {viewMode === 'pdf' ? '📝 텍스트' : '📄 원본'}
-        </button>
-        {viewMode === 'text' && (
-          <div className="flex shrink-0 items-center rounded-md border border-warm-200 bg-white">
-            <button
-              onClick={() => stepFont(-1)}
-              disabled={fontSize <= FONT_SIZES[0]}
-              className="px-2.5 py-1.5 text-sm text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
-              title="글자 작게"
-            >
-              A−
-            </button>
-            <button
-              onClick={() => stepFont(1)}
-              disabled={fontSize >= FONT_SIZES[FONT_SIZES.length - 1]}
-              className="border-l border-warm-200 px-2.5 py-1.5 text-sm text-warm-600 hover:bg-warm-100 disabled:opacity-30 transition-colors"
-              title="글자 크게"
-            >
-              A+
-            </button>
-          </div>
-        )}
+            텍스트
+          </button>
+          <button
+            onClick={() => viewMode === 'text' && toggleView()}
+            className={`rounded-md px-5 py-1.5 text-sm font-bold transition-colors ${
+              viewMode === 'pdf' ? 'bg-white text-warm-900 shadow-sm' : 'text-warm-500'
+            }`}
+          >
+            원본
+          </button>
+        </div>
       </div>
 
       {/* 본문: PDF 원본 (페이지 자동 넘김) 또는 낭독 텍스트 (청크 하이라이트) */}
@@ -365,28 +364,29 @@ export default function AudioReader({ classId, materialName }: Props) {
           </div>
         )}
         {status === 'ready' && manifest && (
-          <div className="space-y-3 leading-relaxed" style={{ fontSize }}>
+          <div className="space-y-4" style={{ fontSize, lineHeight: 1.85 }}>
             {manifest.chunks.map((chunk, ci) => (
               <p
                 key={ci}
                 ref={(el) => {
                   chunkRefs.current[ci] = el;
                 }}
-                className={`rounded-md px-2 py-1 text-warm-800 transition-colors ${
-                  ci === currentChunk
-                    ? 'bg-primary-50 shadow-[inset_0_-2px_0_theme(colors.primary.300)]'
-                    : ''
-                }`}
+                className="text-warm-800"
               >
-                {chunk.sentences.map((sent, si) => (
-                  <span
-                    key={si}
-                    onClick={() => seekToSentence(ci, si)}
-                    className="cursor-pointer rounded px-0.5 hover:bg-warm-100"
-                  >
-                    {sent}{' '}
-                  </span>
-                ))}
+                {chunk.sentences.map((sent, si) => {
+                  const on = ci === currentChunk && si === currentSentIdx;
+                  return (
+                    <span
+                      key={si}
+                      onClick={() => seekToSentence(ci, si)}
+                      className={`cursor-pointer rounded px-0.5 transition-colors ${
+                        on ? 'bg-highlight text-warm-900' : 'hover:bg-warm-100'
+                      }`}
+                    >
+                      {sent}{' '}
+                    </span>
+                  );
+                })}
               </p>
             ))}
           </div>
@@ -394,9 +394,9 @@ export default function AudioReader({ classId, materialName }: Props) {
       </div>
       )}
 
-      {/* 플레이어 */}
+      {/* 미니 플레이어 — 진행바 + −15/재생/+15 + 배속칩(시트) */}
       {status === 'ready' && fileUrl && (
-        <div className="border-t border-warm-200 bg-white px-4 py-3">
+        <div className="flex-none border-t border-warm-100 bg-white px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <audio
             ref={audioRef}
             src={fileUrl}
@@ -433,51 +433,135 @@ export default function AudioReader({ classId, materialName }: Props) {
             }}
             onEnded={handleEnded}
           />
-          {/* 진행바 */}
-          <div className="mb-2.5 flex items-center gap-2">
-            <span className="w-11 text-right text-xs tabular-nums text-warm-500">
-              {formatTime(currentTime)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={duration || manifest?.duration || 0}
-              step={0.1}
-              value={currentTime}
-              onChange={(e) => seekTo(Number(e.target.value))}
-              className="h-1.5 flex-1 accent-primary-500"
-            />
-            <span className="w-11 text-xs tabular-nums text-warm-500">
-              {formatTime(duration || manifest?.duration || 0)}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={duration || manifest?.duration || 0}
+            step={0.1}
+            value={currentTime}
+            onChange={(e) => seekTo(Number(e.target.value))}
+            className="mb-2.5 h-1.5 w-full accent-primary-500"
+          />
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 text-xs tabular-nums text-warm-400">{formatTime(currentTime)}</span>
+            <button
+              onClick={() => skipBy(-15)}
+              className="flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-warm-200 text-[10px] font-bold leading-none text-warm-600 hover:bg-warm-50 transition-colors"
+              title="15초 뒤로"
+            >
+              <span className="text-base leading-none">↺</span>15
+            </button>
             <button
               onClick={togglePlay}
-              className="rounded-full bg-primary-500 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
+              className="grid h-14 w-14 place-items-center rounded-full bg-primary-500 text-lg text-white shadow-[0_6px_14px_-4px_rgba(18,184,134,0.55)]"
+              title={playing ? '일시정지' : '재생'}
             >
-              {playing ? '⏸ 일시정지' : '▶ 재생'}
+              {playing ? '❚❚' : '▶'}
             </button>
-            <div className="flex flex-1 items-center gap-1.5 text-xs text-warm-500">
-              <span>배속</span>
-              <input
-                type="range"
-                min={0.7}
-                max={2}
-                step={0.1}
-                value={rate}
-                onChange={(e) => setRate(Number(e.target.value))}
-                className="h-1.5 w-24 accent-primary-500"
-              />
-              <span className="tabular-nums">{rate.toFixed(1)}×</span>
-            </div>
-            {currentChunk >= 0 && manifest && (
-              <span className="text-xs tabular-nums text-warm-400">
-                {currentChunk + 1}/{manifest.chunks.length}
-              </span>
-            )}
+            <button
+              onClick={() => skipBy(15)}
+              className="flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-warm-200 text-[10px] font-bold leading-none text-warm-600 hover:bg-warm-50 transition-colors"
+              title="15초 앞으로"
+            >
+              <span className="text-base leading-none">↻</span>15
+            </button>
+            <button
+              onClick={() => setSheetOpen(true)}
+              className="ml-auto flex h-9 items-center gap-1 rounded-[10px] bg-primary-100 px-3 text-[13px] font-extrabold text-primary-600"
+              title="배속·음성·설정"
+            >
+              {fmtRate(rate)}× <span className="text-[10px] text-warm-400">▲</span>
+            </button>
           </div>
         </div>
+      )}
+
+      {/* 바텀시트: 배속·음성·범위·글자 크기 */}
+      {sheetOpen && status === 'ready' && (
+        <>
+          <div
+            className="absolute inset-0 z-40 bg-black/30"
+            onClick={() => setSheetOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 z-50 rounded-t-2xl bg-white px-4 pt-2.5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_-12px_rgba(0,0,0,0.25)]">
+            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-warm-300" />
+
+            <div className="mb-4">
+              <div className="mb-2 text-[11px] font-extrabold tracking-wide text-warm-400">배속</div>
+              <div className="flex flex-wrap gap-1.5">
+                {RATE_PRESETS.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRate(r)}
+                    className={`rounded-full border px-3.5 py-2 text-sm font-bold tabular-nums transition-colors ${
+                      activePreset === r
+                        ? 'border-primary-500 bg-primary-500 text-white'
+                        : 'border-warm-200 bg-white text-warm-600'
+                    }`}
+                  >
+                    {fmtRate(r)}×
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="mb-2 text-[11px] font-extrabold tracking-wide text-warm-400">
+                음성 · 범위
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={voice}
+                  onChange={(e) => setVoice(e.target.value)}
+                  className="h-11 flex-1 rounded-xl border border-warm-200 bg-white px-3 text-sm font-medium text-warm-800"
+                >
+                  {Object.entries(voices).map(([name, label]) => (
+                    <option key={name} value={name}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {sections.length > 1 && (
+                  <select
+                    value={section ?? ''}
+                    onChange={(e) => selectSection(e.target.value)}
+                    className="h-11 flex-1 rounded-xl border border-warm-200 bg-white px-3 text-sm font-medium text-warm-800"
+                  >
+                    {sections.map((s) => (
+                      <option key={s.section} value={s.section}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {viewMode === 'text' && (
+              <div>
+                <div className="mb-2 text-[11px] font-extrabold tracking-wide text-warm-400">
+                  글자 크기
+                </div>
+                <div className="flex h-11 w-28 overflow-hidden rounded-xl border border-warm-200">
+                  <button
+                    onClick={() => stepFont(-1)}
+                    disabled={fontSize <= FONT_SIZES[0]}
+                    className="flex-1 text-sm font-bold text-warm-600 disabled:opacity-30"
+                  >
+                    A−
+                  </button>
+                  <button
+                    onClick={() => stepFont(1)}
+                    disabled={fontSize >= FONT_SIZES[FONT_SIZES.length - 1]}
+                    className="flex-1 border-l border-warm-200 text-sm font-bold text-warm-600 disabled:opacity-30"
+                  >
+                    A+
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
