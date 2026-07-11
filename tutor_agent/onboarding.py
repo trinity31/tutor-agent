@@ -50,6 +50,12 @@ def seed_sample_class(user_email: str) -> None:
         shutil.copy(sample_pdf, mat_dir / f"{SAMPLE_MATERIAL}.pdf")
         save_manifest([SAMPLE_MATERIAL], email, class_id)
 
+        # 사전 생성된 학습 인덱스(.md)도 복사 — 온보딩에서 인덱스 탭이
+        # "생성" 버튼 대신 바로 내용을 보여주도록. 없으면 건너뜀(생성 버튼 폴백).
+        seed_md = next(iter(_SEED_DIR.glob("*.md")), None)
+        if seed_md:
+            shutil.copy(seed_md, mat_dir / f"{SAMPLE_MATERIAL}.md")
+
         # 2) 사전 생성 오디오 + audio_assets 레코드 (오디오 경로엔 class_id 없음, NFC 자료명)
         audio_dir = service._AUDIO_DIR / email / SAMPLE_MATERIAL
         audio_dir.mkdir(parents=True, exist_ok=True)
