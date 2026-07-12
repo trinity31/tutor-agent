@@ -47,6 +47,8 @@ export default function AudioReader({ classId, materialName }: Props) {
   const chunkRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   // 섹션 자동 이어듣기: 다음 섹션 오디오가 로드되면 바로 재생
   const autoAdvanceRef = useRef(false);
+  // 다른 섹션의 특정 페이지로 "이 페이지부터 듣기": 섹션 전환 후 로드되면 그 페이지로 시크
+  const pendingSeekPageRef = useRef<number | null>(null);
 
   // 청취 계측(T9): 재생 시작 시점·컨텍스트를 스냅샷해 두고
   // 일시정지·종료·섹션전환·언마운트에서 구간(초)을 합산 전송한다.
@@ -161,6 +163,19 @@ export default function AudioReader({ classId, materialName }: Props) {
     if (!audio) return;
     audio.playbackRate = rate;
     setDuration(audio.duration);
+    // 다른 섹션에서 "이 페이지부터 듣기"로 넘어온 경우: 저장 위치 대신 요청 페이지로
+    if (pendingSeekPageRef.current != null) {
+      const page = pendingSeekPageRef.current;
+      pendingSeekPageRef.current = null;
+      const target =
+        manifest?.chunks.find((c) => c.page === page) ??
+        manifest?.chunks.find((c) => (c.page ?? 0) >= page) ??
+        manifest?.chunks[0];
+      audio.currentTime = target ? target.start : 0;
+      audio.play();
+      updatePositionState();
+      return;
+    }
     const saved = posKey ? Number(localStorage.getItem(posKey)) : 0;
     if (saved > 0 && saved < audio.duration - 1) {
       audio.currentTime = saved;
@@ -261,13 +276,34 @@ export default function AudioReader({ classId, materialName }: Props) {
       return m ? Math.max(max, Number(m[1])) : max;
     }, 0) || 1;
 
-  // "이 페이지부터 듣기" — 해당 페이지의 첫 청크로 시크
+  // 섹션 ID("p9-16")에서 페이지 범위 추출
+  const sectionPageRange = (id: string): [number, number] => {
+    const m = id.match(/(\d+)\s*-\s*(\d+)/);
+    return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+  };
+
+  // "이 페이지부터 듣기" — 페이지가 현재 섹션 밖이면 해당 섹션으로 전환 후 시크
   const listenFromPage = (page: number) => {
-    if (!manifest) return;
-    const target =
-      manifest.chunks.find((c) => c.page === page) ??
-      manifest.chunks.find((c) => (c.page ?? 0) > page);
-    if (target) seekTo(target.start);
+    // 1) 현재 섹션 안의 페이지면 바로 시크
+    const here = manifest?.chunks.find((c) => c.page === page);
+    if (here) {
+      seekTo(here.start);
+      return;
+    }
+    // 2) 다른 섹션이면 그 섹션으로 전환 → 로드되면 handleLoadedMetadata에서 시크
+    const targetSection = sections.find((s) => {
+      const [st, en] = sectionPageRange(s.section);
+      return page >= st && page <= en;
+    });
+    if (targetSection && targetSection.section !== section) {
+      pendingSeekPageRef.current = page;
+      selectSection(targetSection.section);
+      return;
+    }
+    // 3) 폴백: 현재 매니페스트에서 페이지 이상인 첫 청크
+    const fallback =
+      manifest?.chunks.find((c) => (c.page ?? 0) >= page) ?? manifest?.chunks[0];
+    if (fallback) seekTo(fallback.start);
   };
 
   const skipBy = (delta: number) => {
