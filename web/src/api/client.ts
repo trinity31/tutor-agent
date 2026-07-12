@@ -123,6 +123,14 @@ export async function getMaterialStatus(classId: string) {
   );
 }
 
+/** 자료 학습 시작(과외·Q&A·퀴즈·인덱스·듣기) 기록 → '학습중'. 실패해도 조용히 무시. */
+export function markMaterialStarted(classId: string, materialName: string) {
+  if (!classId || !materialName) return;
+  apiPost('/material-activity', { class_id: classId, material_name: materialName }).catch(
+    () => {},
+  );
+}
+
 // --- Material Index ---
 
 export async function getMaterialIndex(classId: string, materialName: string) {

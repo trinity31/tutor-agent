@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
+import { markMaterialStarted } from '../../api/client';
 import MessageBubble from './MessageBubble';
 import AgentStatus from './AgentStatus';
 import ChatInput from './ChatInput';
@@ -33,9 +34,21 @@ export default function ChatArea() {
     selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
   const [indexPanelOpen, setIndexPanelOpen] = useState(true);
   const [panelMode, setPanelMode] = useState<'index' | 'audio'>('index');
+
+  // 과외·Q&A·퀴즈·인덱스·듣기 중 하나라도 하면 '학습중'으로 기록 (자료당 세션 1회)
+  const markedRef = useRef<Set<string>>(new Set());
+  const markStarted = (material: string | null | undefined) => {
+    if (!selectedClassId || !material) return;
+    const key = `${selectedClassId}::${material}`;
+    if (markedRef.current.has(key)) return;
+    markedRef.current.add(key);
+    markMaterialStarted(selectedClassId, material);
+  };
+
   const openPanel = (mode: 'index' | 'audio') => {
     setPanelMode(mode);
     setIndexPanelOpen(true);
+    markStarted(indexableMaterial); // 인덱스·듣기
   };
 
   // 모바일(<md)에서는 패널을 전체 화면 오버레이로 띄운다
@@ -54,8 +67,11 @@ export default function ChatArea() {
   }, []);
 
   useEffect(() => {
-    // 데스크톱은 자료 선택 시 자동으로 열고, 모바일은 화면을 덮으므로 버튼으로 연다
-    if (indexableMaterial) setIndexPanelOpen(!isMobile);
+    // 데스크톱은 자료 선택 시 자동으로 열고(= 인덱스 활동), 모바일은 버튼으로 연다
+    if (indexableMaterial) {
+      setIndexPanelOpen(!isMobile);
+      if (!isMobile) markStarted(indexableMaterial);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indexableMaterial]);
 
@@ -111,6 +127,7 @@ export default function ChatArea() {
 
   const handleSend = (text: string) => {
     const materialNames = selectedMaterials.length > 0 ? selectedMaterials.join('|') : undefined;
+    selectedMaterials.forEach(markStarted); // 과외·Q&A·퀴즈(및 직접 입력)
     sendMessage(text, selectedClassId || undefined, materialNames);
   };
 

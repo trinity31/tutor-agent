@@ -32,6 +32,7 @@ from ..auth import (
     get_classes,
     get_completed_materials,
     get_material_activity,
+    mark_material_started,
     get_quiz_result,
     get_quiz_results,
     get_study_notes,
@@ -726,6 +727,17 @@ async def list_completed_materials(class_id: str, user: dict = Depends(get_curre
 async def material_status(class_id: str, user: dict = Depends(get_current_user)):
     """자료별 학습 상태(완료/학습중) 집합을 반환합니다."""
     return get_material_activity(user["email"], class_id)
+
+
+class MarkActivityRequest(BaseModel):
+    class_id: str
+    material_name: str
+
+
+@app.post("/api/material-activity", status_code=204)
+async def mark_activity(body: MarkActivityRequest, user: dict = Depends(get_current_user)):
+    """자료 학습 시작(과외·Q&A·퀴즈·인덱스·듣기)을 기록해 '학습중'으로 만듭니다."""
+    mark_material_started(user["email"], body.class_id, body.material_name)
 
 
 # --- Study Notes Endpoints ---

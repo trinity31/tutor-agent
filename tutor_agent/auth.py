@@ -163,6 +163,18 @@ def _get_db() -> sqlite3.Connection:
         )
         """
     )
+    # 학습중 판정용 활동 마커: 과외·Q&A·퀴즈·인덱스·듣기 중 하나라도 하면 1행
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS material_starts (
+            user_email TEXT NOT NULL,
+            class_id TEXT NOT NULL,
+            material_name TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (user_email, class_id, material_name)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -516,11 +528,30 @@ def get_completed_materials(user_email: str, class_id: str) -> list[str]:
         conn.close()
 
 
+def mark_material_started(user_email: str, class_id: str, material_name: str) -> None:
+    """자료 학습 시작을 기록합니다(멱등).
+
+    과외·Q&A·퀴즈·인덱스·듣기 중 하나라도 하면 호출되어 '학습중' 상태로 만든다.
+    """
+    if not material_name:
+        return
+    conn = _get_db()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO material_starts (user_email, class_id, material_name) "
+            "VALUES (?, ?, ?)",
+            (user_email.lower(), class_id, material_name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_material_activity(user_email: str, class_id: str) -> dict:
     """자료별 학습 상태 계산용 집합을 반환합니다.
 
     completed: 학습 완료(completions) 자료.
-    in_progress: 완료는 아니지만 퀴즈·노트 활동이 있는 자료.
+    in_progress: 완료는 아니지만 활동(과외·Q&A·퀴즈·인덱스·듣기·노트)이 있는 자료.
     (둘 다 아닌 자료는 프론트에서 '미시작'으로 처리)
     """
     email = user_email.lower()
@@ -534,7 +565,7 @@ def get_material_activity(user_email: str, class_id: str) -> dict:
             )
         }
         active: set[str] = set()
-        for tbl in ("quiz_results", "study_notes"):
+        for tbl in ("quiz_results", "study_notes", "material_starts"):
             active |= {
                 r["material_name"]
                 for r in conn.execute(
