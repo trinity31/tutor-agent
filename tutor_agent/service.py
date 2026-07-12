@@ -542,71 +542,53 @@ def get_audio_manifest(
 _BODY_FONT_RATIO = 0.95
 
 
-def _effective_font_size(tm, font_size) -> float:
-    """텍스트 렌더링 행렬을 반영한 실제 폰트 크기를 계산합니다."""
-    if not font_size:
-        return 0.0
-    return abs(font_size * tm[3]) if tm and tm[3] else font_size
-
-
-def _dominant_font_size(reader) -> float:
-    """문서 본문 폰트 크기(글자 수 기준 최빈값)를 계산합니다."""
-    from collections import Counter
-
-    sizes: Counter = Counter()
-
-    def visitor(text, cm, tm, font_dict, font_size):
-        t = text.strip()
-        if t:
-            eff = _effective_font_size(tm, font_size)
-            if eff:
-                sizes[round(eff, 1)] += len(t)
-
-    for page in reader.pages:
-        try:
-            page.extract_text(visitor_text=visitor)
-        except Exception:
-            continue
-    return sizes.most_common(1)[0][0] if sizes else 0.0
-
-
-def _extract_body_pages(reader, start: int, end: int) -> list[tuple[int, str]]:
+def _extract_body_pages(pdf_path, start: int, end: int) -> list[tuple[int, str]]:
     """섹션 페이지(1-based, 양끝 포함)의 본문 텍스트를 페이지별로 추출합니다.
 
-    각주·푸터·쪽번호·URL 줄은 본문보다 작은 폰트로 조판되므로
-    본문 폰트 크기 95% 미만인 텍스트를 걸러 낭독에서 제외한다.
+    문자 좌표를 반영하는 pdfplumber로 추출한다. pypdf는 숫자를 본문에서
+    떼어내 다른 위치의 런으로 뽑아 '3차원'→'차원'처럼 숫자를 유실시키므로
+    쓸 수 없다(문자 단위 재구성이 필요). 각주·푸터·쪽번호는 본문보다 작은
+    폰트로 조판되므로 본문 폰트 크기 95% 미만 문자를 걸러 낭독에서 제외한다.
+    특이 조판으로 과도하게 걸러진 페이지는 원문 추출로 폴백한다.
     페이지 번호는 PDF 뷰의 재생 위치 동기화(자동 넘김)에 쓰인다.
     """
-    threshold = _dominant_font_size(reader) * _BODY_FONT_RATIO
-    plain_pages: list[tuple[int, str]] = []
+    import pdfplumber
+    from collections import Counter
+
     body_pages: list[tuple[int, str]] = []
+    with pdfplumber.open(str(pdf_path)) as pdf:
+        pages = pdf.pages[start - 1 : end]
+        # 섹션 본문 폰트 크기(문자 수 기준 최빈값)
+        sizes: Counter = Counter()
+        for page in pages:
+            for ch in page.chars:
+                if (ch.get("text") or "").strip():
+                    sizes[round(ch.get("size") or 0, 1)] += 1
+        threshold = (sizes.most_common(1)[0][0] if sizes else 0.0) * _BODY_FONT_RATIO
 
-    for page_no, page in enumerate(reader.pages[start - 1 : end], start=start):
-        chunks: list[str] = []
-
-        def visitor(text, cm, tm, font_dict, font_size):
-            if text and (
-                not threshold or _effective_font_size(tm, font_size) >= threshold
-            ):
-                chunks.append(text)
-
-        try:
-            plain_pages.append((page_no, page.extract_text(visitor_text=visitor) or ""))
-        except Exception:
-            plain_pages.append((page_no, page.extract_text() or ""))
-        body_pages.append((page_no, "".join(chunks)))
-
-    body_len = sum(len(t.strip()) for _, t in body_pages)
-    plain_len = sum(len(t.strip()) for _, t in plain_pages)
-    # 과도하게 걸러진 경우(특이한 조판) 원본 추출로 폴백
-    if body_len < plain_len * 0.3:
-        return plain_pages
+        for offset, page in enumerate(pages):
+            page_no = start + offset
+            plain = page.extract_text() or ""
+            if threshold:
+                body = (
+                    page.filter(
+                        lambda o: o.get("object_type") != "char"
+                        or (o.get("size") or 999) >= threshold
+                    ).extract_text()
+                    or ""
+                )
+            else:
+                body = plain
+            # 과도하게 걸러진 경우(특이 조판) 원문 추출로 폴백
+            if len(body.strip()) < len(plain.strip()) * 0.3:
+                body = plain
+            body_pages.append((page_no, body))
     return body_pages
 
 
-def _extract_body_text(reader, start: int, end: int) -> str:
+def _extract_body_text(pdf_path, start: int, end: int) -> str:
     """섹션 본문 텍스트를 하나의 문자열로 반환합니다 (페이지 정보 불필요 시)."""
-    return "\n".join(t for _, t in _extract_body_pages(reader, start, end))
+    return "\n".join(t for _, t in _extract_body_pages(pdf_path, start, end))
 
 
 def _pcm_to_wav(pcm: bytes, path: Path, rate: int = PCM_RATE) -> None:
@@ -711,8 +693,6 @@ def generate_audio_asset(
     Gemini TTS는 타임스탬프를 주지 않으므로 청크별 PCM 길이로
     정확한 재생 시간을 계산해 매니페스트에 기록한다.
     """
-    from pypdf import PdfReader
-
     from .auth import get_audio_asset, update_audio_asset
 
     material_name = _nfc(material_name)
@@ -732,10 +712,9 @@ def generate_audio_asset(
         if not pdf_path or not pages:
             return _fail("PDF 원본을 찾을 수 없습니다.")
 
-        reader = PdfReader(str(pdf_path))
         start, end = pages
         chunks = build_narration_chunks_paged(
-            _extract_body_pages(reader, start, end), refine=_refine_narration_text
+            _extract_body_pages(pdf_path, start, end), refine=_refine_narration_text
         )
         if not chunks:
             return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
