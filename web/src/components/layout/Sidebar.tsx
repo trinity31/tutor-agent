@@ -10,8 +10,11 @@ import {
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
+import { useUIStore } from '../../stores/uiStore';
 
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const statusVersion = useUIStore((s) => s.statusVersion);
+  const bumpStatus = useUIStore((s) => s.bumpStatus);
   const { user, logout } = useAuthStore();
   const { newChat } = useChatStore();
   const {
@@ -66,7 +69,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       setCompletedMaterials([]);
       setInProgressMaterials([]);
     }
-  }, [selectedClassId]);
+  }, [selectedClassId, statusVersion]);
 
   // 선택된 자료 변경 시 노트 로드
   useEffect(() => {
@@ -123,6 +126,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     try {
       await markComplete({ class_id: classId, material_name: name });
       setCompletedMaterials((prev) => [...prev, name]);
+      bumpStatus(); // 홈의 학습완료 버튼 상태도 동기화
     } catch { /* ignore */ }
     setCompletingMaterial(null);
   };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { apiGet } from "../../api/client";
+import { apiGet, markComplete, getMaterialStatus } from "../../api/client";
 import { useClassStore } from "../../stores/classStore";
 import { useUIStore } from "../../stores/uiStore";
 
@@ -60,7 +60,11 @@ export default function OnboardingCards({
   onOpenIndex?: (mode: 'index' | 'audio') => void;
 }) {
   const openSidebar = useUIStore((s) => s.openSidebar);
+  const bumpStatus = useUIStore((s) => s.bumpStatus);
+  const statusVersion = useUIStore((s) => s.statusVersion);
   const { createClass, selectClass, materials, selectedMaterials, uploadMaterial } = useClassStore();
+  const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
+  const [completing, setCompleting] = useState(false);
   const [examples, setExamples] = useState<Record<string, string>>({});
   const [loadingExamples, setLoadingExamples] = useState(false);
   const [newClassName, setNewClassName] = useState("");
@@ -83,6 +87,38 @@ export default function OnboardingCards({
       .catch(() => {})
       .finally(() => setLoadingExamples(false));
   }, [selectedClassId, selectedMaterials]);
+
+  // 선택 자료의 완료 여부 로드 (중복 완료 방지 — save_completion은 멱등이 아님)
+  useEffect(() => {
+    if (!selectedClassId || selectedMaterials.length === 0) {
+      setCompletedSet(new Set());
+      return;
+    }
+    getMaterialStatus(selectedClassId)
+      .then((res) => setCompletedSet(new Set(res.completed)))
+      .catch(() => setCompletedSet(new Set()));
+  }, [selectedClassId, selectedMaterials, statusVersion]);
+
+  const allCompleted =
+    selectedMaterials.length > 0 && selectedMaterials.every((m) => completedSet.has(m));
+
+  const handleComplete = async () => {
+    if (!selectedClassId || completing) return;
+    const targets = selectedMaterials.filter((m) => !completedSet.has(m));
+    if (targets.length === 0) return;
+    setCompleting(true);
+    try {
+      for (const m of targets) {
+        await markComplete({ class_id: selectedClassId, material_name: m });
+      }
+      setCompletedSet((prev) => new Set([...prev, ...targets]));
+      bumpStatus(); // 사이드바 배지 동기화
+    } catch {
+      /* ignore */
+    }
+    setCompleting(false);
+  };
+
   const [uploadMsg, setUploadMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -282,6 +318,31 @@ export default function OnboardingCards({
           </>
         )}
       </div>
+
+      {/* 학습 완료 — 자료 선택 시. 완료하면 다음날 복습 퀴즈 생성 */}
+      {selectedMaterials.length > 0 && (
+        <div className="mt-4 border-t border-warm-100 pt-4">
+          {allCompleted ? (
+            <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary-200 bg-primary-50 py-3.5 text-[15px] font-bold text-primary-600">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12l4.5 4.5L19 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              학습 완료됨
+            </div>
+          ) : (
+            <button
+              onClick={handleComplete}
+              disabled={completing}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-500 py-3.5 text-[15px] font-bold text-white shadow-[0_8px_18px_-8px_rgba(18,184,134,0.6)] transition-transform active:scale-[0.99] disabled:opacity-60"
+            >
+              {completing ? "처리 중..." : "학습 완료"}
+            </button>
+          )}
+          <p className="mt-2 text-center text-[11px] text-warm-400">
+            완료하면 다음 날 복습 퀴즈가 만들어져요
+          </p>
+        </div>
+      )}
     </div>
   );
 }
