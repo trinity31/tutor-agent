@@ -268,6 +268,10 @@ export async function streamChat(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  // event 타입은 read() 청크 경계를 넘어 유지돼야 한다. 루프 안에서 초기화하면
+  // 모바일처럼 네트워크가 잘게 쪼개질 때 'event: quiz'와 'data:' 줄이 다른
+  // 청크에 걸려 이벤트 타입이 유실된다(퀴즈가 안 뜨는 원인).
+  let currentEvent = '';
 
   while (true) {
     const { done, value } = await reader.read();
@@ -277,7 +281,6 @@ export async function streamChat(
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
 
-    let currentEvent = '';
     for (const line of lines) {
       if (line.startsWith('event: ')) {
         currentEvent = line.slice(7).trim();
