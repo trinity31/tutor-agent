@@ -42,6 +42,8 @@ export default function AudioReader({ classId, materialName }: Props) {
     setCurrentChunk,
     requestGeneration,
     regenerate,
+    regenerateAll,
+    regenProgress,
   } = useAudioStore();
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -360,6 +362,14 @@ export default function AudioReader({ classId, materialName }: Props) {
         </div>
       </div>
 
+      {/* 전체 재생성 진행 배너 */}
+      {regenProgress && (
+        <div className="flex items-center justify-center gap-2 border-b border-primary-100 bg-primary-50 px-4 py-1.5 text-xs font-semibold text-primary-600">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary-300 border-t-primary-600" />
+          전체 재생성 중… {regenProgress.done}/{regenProgress.total} 차시
+        </div>
+      )}
+
       {/* 본문: PDF 원본 (페이지 자동 넘김) 또는 낭독 텍스트 (청크 하이라이트) */}
       {status === 'ready' && viewMode === 'pdf' ? (
         <div className="flex-1 overflow-hidden">
@@ -604,7 +614,7 @@ export default function AudioReader({ classId, materialName }: Props) {
             )}
 
             {/* 낭독 재생성 — 캐시를 지우고 최신 추출·발음·하이라이트로 다시 생성 */}
-            <div className="mt-4 border-t border-warm-100 pt-3">
+            <div className="mt-4 space-y-2 border-t border-warm-100 pt-3">
               <button
                 onClick={() => {
                   if (
@@ -616,11 +626,30 @@ export default function AudioReader({ classId, materialName }: Props) {
                     regenerate();
                   }
                 }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-warm-200 py-2.5 text-sm font-semibold text-warm-600 active:scale-[0.99] transition-transform"
+                disabled={!!regenProgress}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-warm-200 py-2.5 text-sm font-semibold text-warm-600 active:scale-[0.99] transition-transform disabled:opacity-40"
               >
                 ↻ 이 차시 낭독 재생성
               </button>
-              <p className="mt-1.5 text-center text-[11px] text-warm-400">
+              {sections.length > 1 && (
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `이 자료의 모든 차시(${sections.length}개) 낭독을 다시 만들까요? 시간이 걸릴 수 있습니다.`,
+                      )
+                    ) {
+                      setSheetOpen(false);
+                      regenerateAll();
+                    }
+                  }}
+                  disabled={!!regenProgress}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary-500 py-2.5 text-sm font-bold text-white active:scale-[0.99] transition-transform disabled:opacity-40"
+                >
+                  ↻ 이 자료 전체 재생성 ({sections.length}개 차시)
+                </button>
+              )}
+              <p className="text-center text-[11px] text-warm-400">
                 추출·발음·하이라이트 개선을 반영합니다
               </p>
             </div>

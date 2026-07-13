@@ -44,6 +44,11 @@ interface AudioState {
   setCurrentChunk: (idx: number) => void;
   requestGeneration: (force?: boolean) => Promise<void>;
   regenerate: () => void;
+  regenerateAll: () => Promise<void>;
+  /** 전체 재생성 진행 상황 (null이면 미진행) */
+  regenProgress: { done: number; total: number } | null;
+  /** 오디오 캐시버스트용 — 재생성 시 증가시켜 <audio> src를 새로 받게 한다 */
+  fileVersion: number;
   prefetchNext: () => void;
   advanceToNext: () => boolean;
   reset: () => void;
@@ -65,6 +70,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   currentChunk: -1,
   rate: Number(localStorage.getItem(RATE_KEY)) || 1.0,
   error: '',
+  regenProgress: null,
+  fileVersion: 0,
 
   init: async (classId: string, materialName: string) => {
     pollGeneration++;
@@ -116,8 +123,42 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   regenerate: () => {
     // 캐시된 오디오를 무시하고 최신 파이프라인으로 다시 생성
-    set({ manifest: null, fileUrl: null, currentChunk: -1 });
+    set((s) => ({ manifest: null, fileUrl: null, currentChunk: -1, fileVersion: s.fileVersion + 1 }));
     get().requestGeneration(true);
+  },
+
+  regenerateAll: async () => {
+    // 이 자료의 모든 차시를 순차 재생성 (한 번에 서버가 몰리지 않게 하나씩)
+    const { classId, materialName, sections, voice, section } = get();
+    if (!classId || !materialName || sections.length === 0) return;
+    set((s) => ({
+      regenProgress: { done: 0, total: sections.length },
+      fileVersion: s.fileVersion + 1,
+    }));
+    for (const s of sections) {
+      try {
+        await requestAudio(classId, materialName, s.section, voice, true);
+        // 완료(ready/failed)까지 폴링 — 섹션당 최대 ~10분 안전장치
+        for (let i = 0; i < 200; i++) {
+          const st = await getAudioStatus(classId, materialName, s.section, voice);
+          if (st.status === 'ready' || st.status === 'failed') break;
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        }
+      } catch {
+        /* 한 차시 실패해도 다음 진행 */
+      }
+      set((state) => ({
+        regenProgress: state.regenProgress
+          ? { done: state.regenProgress.done + 1, total: state.regenProgress.total }
+          : null,
+      }));
+    }
+    set({ regenProgress: null });
+    // 현재 보고 있는 차시를 새 결과로 갱신 (텍스트·하이라이트·오디오)
+    if (section) {
+      set({ manifest: null, fileUrl: null, currentChunk: -1 });
+      await get().requestGeneration(false);
+    }
   },
 
   requestGeneration: async (force = false) => {
@@ -129,9 +170,10 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     const finishReady = async () => {
       const manifest = await getAudioManifest(classId, materialName, section, voice);
       if (generation !== pollGeneration) return;
+      const v = get().fileVersion;
       set({
         manifest,
-        fileUrl: audioFileUrl(classId, materialName, section, voice),
+        fileUrl: audioFileUrl(classId, materialName, section, voice) + (v ? `&v=${v}` : ''),
         status: 'ready',
       });
       // 다음 섹션을 미리 생성해 두면 자동 이어듣기 시 대기가 없다
