@@ -254,8 +254,8 @@ export default function OnboardingCards({
   return (
     <div className="mx-auto max-w-xl px-4 py-8">
       <div className="mb-6 text-center">
-        <h2 className="text-lg font-bold text-warm-900">무엇을 도와드릴까요?</h2>
-        <p className="mt-1 text-[13px] text-warm-400">아래를 누르거나 바로 질문해 보세요</p>
+        <h2 className="text-xl font-bold text-warm-900">무엇을 도와드릴까요?</h2>
+        <p className="mt-1.5 text-sm font-semibold text-primary-600">아래를 누르거나 바로 질문해 보세요</p>
       </div>
 
       <div className="space-y-2.5">
