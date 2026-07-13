@@ -217,6 +217,16 @@ export default function AudioReader({ classId, materialName }: Props) {
     }
   }, [currentChunk, playing]);
 
+  // 원본 → 텍스트 전환 시 현재 하이라이트 문단을 맨 위로
+  useEffect(() => {
+    if (viewMode === 'text' && currentChunk >= 0) {
+      requestAnimationFrame(() => {
+        chunkRefs.current[currentChunk]?.scrollIntoView({ block: 'start' });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
