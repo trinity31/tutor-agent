@@ -8,7 +8,6 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
   const { login, register, loading, error, clearError } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -17,7 +16,7 @@ export default function AuthPage() {
     if (isLogin) {
       await login(email, password);
     } else {
-      await register(email, password, undefined, inviteCode);
+      await register(email, password);
     }
   };
 
@@ -112,21 +111,6 @@ export default function AuthPage() {
                     비밀번호가 일치하지 않습니다.
                   </p>
                 )}
-              </div>
-            )}
-
-            {!isLogin && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-warm-700">
-                  초대 코드
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder="베타 초대 코드를 입력하세요"
-                  className="w-full rounded-xl border border-warm-200 bg-warm-50 px-4 py-3 text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 transition-all"
-                />
               </div>
             )}
 
