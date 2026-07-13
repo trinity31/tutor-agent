@@ -371,6 +371,11 @@ export default function AudioReader({ classId, materialName }: Props) {
               numPages={numPages}
               playbackPage={playbackPage}
               onListenFromPage={hasPages ? listenFromPage : undefined}
+              highlight={
+                currentChunk >= 0 && manifest?.chunks[currentChunk]?.bbox
+                  ? { page: playbackPage, box: manifest.chunks[currentChunk].bbox as number[] }
+                  : undefined
+              }
             />
           </Suspense>
         </div>

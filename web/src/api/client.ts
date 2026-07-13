@@ -159,6 +159,8 @@ export interface AudioChunk {
   end: number;
   sentences: string[];
   page?: number; // PDF 원본 페이지 (1-based) — 구버전 매니페스트에는 없음
+  /** 원본 PDF 상 문단 영역 [x0,y0,x1,y1] 정규화(0~1) — 원본 뷰 하이라이트용. 구버전엔 없음 */
+  bbox?: number[] | null;
 }
 
 export interface AudioManifest {

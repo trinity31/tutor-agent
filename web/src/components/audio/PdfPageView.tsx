@@ -10,6 +10,8 @@ interface Props {
   playbackPage: number;
   /** 페이지 단위 시크 ("이 페이지부터 듣기"). 페이지 정보 없는 구버전 매니페스트면 undefined */
   onListenFromPage?: (page: number) => void;
+  /** 현재 낭독 중인 문단의 원본 영역 [x0,y0,x1,y1] 정규화(0~1) + 그 페이지 */
+  highlight?: { page: number; box: number[] };
 }
 
 export default function PdfPageView({
@@ -18,6 +20,7 @@ export default function PdfPageView({
   numPages,
   playbackPage,
   onListenFromPage,
+  highlight,
 }: Props) {
   // 사용자가 직접 넘긴 페이지 — 재생 위치가 바뀌면 다시 재생 페이지를 따라간다
   const [manualPage, setManualPage] = useState<number | null>(null);
@@ -50,16 +53,32 @@ export default function PdfPageView({
         {failed ? (
           <p className="p-4 text-sm text-error-500">페이지를 불러오지 못했습니다.</p>
         ) : (
-          <img
-            src={pdfPageUrl(classId, materialName, page)}
-            alt={`${page}쪽`}
-            className={`mx-auto block ${zoomed ? 'w-[165%] max-w-none' : 'w-full max-w-full'}`}
-            onLoad={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setFailed(true);
-            }}
-          />
+          <div
+            className={`relative mx-auto block ${zoomed ? 'w-[165%] max-w-none' : 'w-full max-w-full'}`}
+          >
+            <img
+              src={pdfPageUrl(classId, materialName, page)}
+              alt={`${page}쪽`}
+              className="block w-full"
+              onLoad={() => setLoading(false)}
+              onError={() => {
+                setLoading(false);
+                setFailed(true);
+              }}
+            />
+            {/* 현재 낭독 문단 하이라이트 — 표시 페이지가 재생 페이지와 같을 때만 */}
+            {highlight && highlight.page === page && highlight.box?.length === 4 && (
+              <div
+                className="pointer-events-none absolute rounded-sm bg-highlight/45 shadow-[0_0_0_1.5px_rgba(240,160,32,0.55)] transition-all duration-300"
+                style={{
+                  left: `${highlight.box[0] * 100}%`,
+                  top: `${highlight.box[1] * 100}%`,
+                  width: `${(highlight.box[2] - highlight.box[0]) * 100}%`,
+                  height: `${(highlight.box[3] - highlight.box[1]) * 100}%`,
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
 

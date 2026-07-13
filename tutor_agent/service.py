@@ -542,20 +542,23 @@ def get_audio_manifest(
 _BODY_FONT_RATIO = 0.95
 
 
-def _extract_body_pages(pdf_path, start: int, end: int) -> list[tuple[int, str]]:
-    """섹션 페이지(1-based, 양끝 포함)의 본문 텍스트를 페이지별로 추출합니다.
+def _extract_page_bodies(pdf_path, start: int, end: int) -> list[dict]:
+    """섹션 페이지의 본문 텍스트 + 레이아웃(줄 bbox)을 페이지별로 추출합니다.
 
     문자 좌표를 반영하는 pdfplumber로 추출한다. pypdf는 숫자를 본문에서
     떼어내 다른 위치의 런으로 뽑아 '3차원'→'차원'처럼 숫자를 유실시키므로
     쓸 수 없다(문자 단위 재구성이 필요). 각주·푸터·쪽번호는 본문보다 작은
     폰트로 조판되므로 본문 폰트 크기 95% 미만 문자를 걸러 낭독에서 제외한다.
     특이 조판으로 과도하게 걸러진 페이지는 원문 추출로 폴백한다.
-    페이지 번호는 PDF 뷰의 재생 위치 동기화(자동 넘김)에 쓰인다.
+
+    Returns: [{"page": n, "text": 본문, "w": 폭, "h": 높이,
+               "lines": [(줄텍스트, x0, top, x1, bottom)]}] — 줄 bbox는
+    원본 PDF 위 문단 하이라이트 계산에 쓰인다(포인트 좌표, 좌상단 원점).
     """
     import pdfplumber
     from collections import Counter
 
-    body_pages: list[tuple[int, str]] = []
+    out: list[dict] = []
     with pdfplumber.open(str(pdf_path)) as pdf:
         pages = pdf.pages[start - 1 : end]
         # 섹션 본문 폰트 크기(문자 수 기준 최빈값)
@@ -569,26 +572,92 @@ def _extract_body_pages(pdf_path, start: int, end: int) -> list[tuple[int, str]]
         for offset, page in enumerate(pages):
             page_no = start + offset
             plain = page.extract_text() or ""
+            src = page
             if threshold:
-                body = (
-                    page.filter(
-                        lambda o: o.get("object_type") != "char"
-                        or (o.get("size") or 999) >= threshold
-                    ).extract_text()
-                    or ""
+                src = page.filter(
+                    lambda o: o.get("object_type") != "char"
+                    or (o.get("size") or 999) >= threshold
                 )
+                body = src.extract_text() or ""
             else:
                 body = plain
             # 과도하게 걸러진 경우(특이 조판) 원문 추출로 폴백
             if len(body.strip()) < len(plain.strip()) * 0.3:
-                body = plain
-            body_pages.append((page_no, body))
-    return body_pages
+                body, src = plain, page
+            lines: list[tuple] = []
+            try:
+                for ln in src.extract_text_lines():
+                    lines.append((ln["text"], ln["x0"], ln["top"], ln["x1"], ln["bottom"]))
+            except Exception:
+                pass
+            out.append({
+                "page": page_no,
+                "text": body,
+                "w": float(page.width),
+                "h": float(page.height),
+                "lines": lines,
+            })
+    return out
+
+
+def _extract_body_pages(pdf_path, start: int, end: int) -> list[tuple[int, str]]:
+    """섹션 페이지의 본문 텍스트를 (페이지 번호, 텍스트) 목록으로 반환합니다."""
+    return [(b["page"], b["text"]) for b in _extract_page_bodies(pdf_path, start, end)]
 
 
 def _extract_body_text(pdf_path, start: int, end: int) -> str:
     """섹션 본문 텍스트를 하나의 문자열로 반환합니다 (페이지 정보 불필요 시)."""
     return "\n".join(t for _, t in _extract_body_pages(pdf_path, start, end))
+
+
+def _attach_chunk_bboxes(chunks: list[dict], page_bodies: list[dict]) -> None:
+    """각 청크(문단)에 원본 PDF 상의 영역 bbox를 붙입니다(정규화 0~1).
+
+    청크가 어느 원본 줄에서 왔는지 텍스트 매칭으로 정밀 정합하기는, 정제로
+    글자가 바뀌어 불안정하다. 대신 같은 페이지의 청크들과 원본 본문 줄을
+    각각 읽기 순서대로 두고 '누적 글자수 비율'로 줄→청크를 배정한 뒤, 배정된
+    줄들의 bbox를 합쳐 문단 영역을 만든다(실제 줄 좌표 사용 + 정제에 견고).
+    """
+    from collections import defaultdict
+
+    layout = {b["page"]: b for b in page_bodies}
+    by_page: dict[int, list[dict]] = defaultdict(list)
+    for c in chunks:
+        by_page[c["page"]].append(c)
+
+    for page, pchunks in by_page.items():
+        info = layout.get(page)
+        if not info or not info["lines"] or not info["w"] or not info["h"]:
+            continue
+        lines = info["lines"]
+        w, h = info["w"], info["h"]
+        line_lens = [max(1, len(t)) for t, *_ in lines]
+        total_src = sum(line_lens)
+        chunk_lens = [max(1, sum(len(s) for s in c["sentences"])) for c in pchunks]
+        total_chunk = sum(chunk_lens)
+        # 각 청크의 누적 비율 구간
+        bounds, acc = [], 0
+        for cl in chunk_lens:
+            lo = acc / total_chunk
+            acc += cl
+            bounds.append((lo, acc / total_chunk))
+        # 각 원본 줄을 중앙 비율이 속하는 청크에 배정
+        assigned: list[list[tuple]] = [[] for _ in pchunks]
+        acc = 0
+        for i, (_t, x0, y0, x1, y1) in enumerate(lines):
+            mid = (acc + line_lens[i] / 2) / total_src
+            acc += line_lens[i]
+            ci = next((j for j, (_lo, hi) in enumerate(bounds) if mid < hi), len(pchunks) - 1)
+            assigned[ci].append((x0, y0, x1, y1))
+        for c, boxes in zip(pchunks, assigned):
+            if not boxes:
+                continue
+            c["bbox"] = [
+                round(min(b[0] for b in boxes) / w, 4),
+                round(min(b[1] for b in boxes) / h, 4),
+                round(max(b[2] for b in boxes) / w, 4),
+                round(max(b[3] for b in boxes) / h, 4),
+            ]
 
 
 def _pcm_to_wav(pcm: bytes, path: Path, rate: int = PCM_RATE) -> None:
@@ -713,9 +782,11 @@ def generate_audio_asset(
             return _fail("PDF 원본을 찾을 수 없습니다.")
 
         start, end = pages
+        page_bodies = _extract_page_bodies(pdf_path, start, end)
         chunks = build_narration_chunks_paged(
-            _extract_body_pages(pdf_path, start, end), refine=_refine_narration_text
+            [(b["page"], b["text"]) for b in page_bodies], refine=_refine_narration_text
         )
+        _attach_chunk_bboxes(chunks, page_bodies)
         if not chunks:
             return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
 
@@ -748,6 +819,7 @@ def generate_audio_asset(
                 "end": round(cursor + duration, 2),
                 "sentences": chunk["sentences"],
                 "page": chunk["page"],
+                "bbox": chunk.get("bbox"),  # 원본 PDF 상 문단 영역(정규화 0~1)
             })
             cursor += duration
 
