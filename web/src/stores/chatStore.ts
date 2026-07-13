@@ -41,6 +41,8 @@ interface ChatState {
   answerQuiz: (selected: string) => void;
   quitQuiz: () => void;
   clearError: () => void;
+  /** 카드로 대화 시작 시 임의 질문 대신 안내 메시지만 띄운다(사용자 입력 대기) */
+  promptGreeting: (greeting: string) => void;
 }
 
 export interface QuizAnswer {
@@ -203,6 +205,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   quitQuiz: () => {
     set({ quizData: null, quizIndex: 0, quizAnswers: [] });
+  },
+
+  promptGreeting: (greeting: string) => {
+    set((s) => ({
+      messages: [
+        ...s.messages,
+        { id: msgId(), role: 'assistant', content: greeting },
+      ],
+    }));
   },
 
   clearError: () => set({ error: null }),

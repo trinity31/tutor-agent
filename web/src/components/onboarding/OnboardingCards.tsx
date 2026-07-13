@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { apiGet, markComplete, getMaterialStatus } from "../../api/client";
+import { markComplete, getMaterialStatus } from "../../api/client";
 import { useClassStore } from "../../stores/classStore";
 import { useUIStore } from "../../stores/uiStore";
+import { useChatStore } from "../../stores/chatStore";
 
 const CARDS = [
   {
@@ -63,29 +64,11 @@ export default function OnboardingCards({
   const bumpStatus = useUIStore((s) => s.bumpStatus);
   const statusVersion = useUIStore((s) => s.statusVersion);
   const { createClass, selectClass, materials, selectedMaterials, uploadMaterial } = useClassStore();
+  const promptGreeting = useChatStore((s) => s.promptGreeting);
   const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
-  const [examples, setExamples] = useState<Record<string, string>>({});
-  const [loadingExamples, setLoadingExamples] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  // 자료가 선택되었을 때만 LLM으로 예시 질문 생성
-  useEffect(() => {
-    if (!selectedClassId || selectedMaterials.length === 0) return;
-    setExamples({});
-    setLoadingExamples(true);
-    apiGet<{ examples: { type: string; message: string }[] }>(
-      `/classes/${selectedClassId}/examples?materials=${encodeURIComponent(selectedMaterials.join('|'))}`,
-    )
-      .then((res) => {
-        const map: Record<string, string> = {};
-        for (const ex of res.examples) map[ex.type] = ex.message;
-        setExamples(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingExamples(false));
-  }, [selectedClassId, selectedMaterials]);
 
   // 선택 자료의 완료 여부 로드 (중복 완료 방지 — save_completion은 멱등이 아님)
   useEffect(() => {
@@ -263,26 +246,31 @@ export default function OnboardingCards({
 
       <div className="space-y-2.5">
         {CARDS.map((card) => {
-          const isQna = card.type === "qna";
-          const message = isQna
-            ? (examples[card.type] || card.fallback)
-            : card.fallback;
-          const isLoading = isQna && loadingExamples;
+          // 과외·Q&A는 임의 질문 대신 안내만 띄우고 사용자 입력을 기다린다.
+          // 퀴즈는 바로 생성 요청을 보낸다.
+          const handleClick = () => {
+            if (card.type === "tutor") {
+              promptGreeting(
+                "무엇을 도와드릴까요? 이해가 어려운 부분이나 더 알고 싶은 주제를 편하게 말씀해 주세요.",
+              );
+            } else if (card.type === "qna") {
+              promptGreeting("무엇을 도와드릴까요? 모르는 용어나 개념을 물어보세요.");
+            } else {
+              onSend(card.fallback);
+            }
+          };
           return (
             <button
               key={card.type}
-              onClick={() => !isLoading && onSend(message)}
-              disabled={isLoading}
-              className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-70 disabled:cursor-wait ${card.color}`}
+              onClick={handleClick}
+              className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-all active:scale-[0.99] ${card.color}`}
             >
               <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${card.iconBg}`}>
                 {card.icon}
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-[15px] font-extrabold text-warm-900">{card.title}</h3>
-                <p className="truncate text-xs text-warm-500">
-                  {isLoading ? "질문 생성 중..." : card.desc}
-                </p>
+                <p className="truncate text-xs text-warm-500">{card.desc}</p>
               </div>
               <span className="text-lg text-warm-300">›</span>
             </button>
