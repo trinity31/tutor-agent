@@ -38,7 +38,7 @@ export default function LandingPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-500 text-lg font-bold text-white">
             T
           </div>
-          <span className="font-bold">TutorAgent</span>
+          <span className="font-bold">AI Tutor</span>
         </div>
         <Link
           to="/login"
@@ -119,7 +119,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-warm-100 py-6 text-center text-xs text-warm-400">
-        TutorAgent · 교재를 귀로
+        AI Tutor · 교재를 귀로
       </footer>
     </div>
   );

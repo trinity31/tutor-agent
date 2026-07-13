@@ -128,7 +128,7 @@ export default function AudioReader({ classId, materialName }: Props) {
     ms.metadata = new MediaMetadata({
       // 잠금화면 제목엔 자료명을 우선 노출하고 섹션을 뒤에 붙인다
       title: sectionTitle ? `${materialName} · ${sectionTitle}` : materialName,
-      artist: 'TutorAgent',
+      artist: 'AI Tutor',
       album: materialName,
       artwork: [{ src: '/pwa-512.png', sizes: '512x512', type: 'image/png' }],
     });

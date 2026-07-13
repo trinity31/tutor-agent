@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false, // main.tsx에서 수동 등록
       manifest: {
-        name: 'TutorAgent — 교재를 귀로',
-        short_name: 'TutorAgent',
+        name: 'AI Tutor — 교재를 귀로',
+        short_name: 'AI Tutor',
         description: 'PDF 교재를 낭독으로 듣고 복습하는 AI 학습 도우미',
         lang: 'ko',
         start_url: '/',

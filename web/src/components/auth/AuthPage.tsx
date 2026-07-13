@@ -28,7 +28,7 @@ export default function AuthPage() {
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-xl bg-primary-500 text-3xl text-white">
             T
           </div>
-          <h1 className="text-2xl font-bold text-warm-900">AI Tutor 24/7</h1>
+          <h1 className="text-2xl font-bold text-warm-900">AI Tutor</h1>
           <p className="mt-1 text-warm-500">나만의 AI 과외 선생님</p>
         </div>
 

@@ -24,7 +24,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               />
             </svg>
           </button>
-          <h1 className="ml-3 text-base font-bold text-warm-900">AI Tutor 24/7</h1>
+          <h1 className="ml-3 text-base font-bold text-warm-900">AI Tutor</h1>
         </header>
 
         {children}
