@@ -972,11 +972,13 @@ async def run_scheduled_quiz_generation() -> list[dict]:
                 status="in_progress",
             )
 
-            # Slack 전송
-            from .auth import get_quiz_result
-            quiz = get_quiz_result(quiz_result["id"])
-            if quiz:
-                await post_quiz_to_slack(quiz)
+            # Slack 전송 — SLACK_ENABLED=1일 때만. 기본은 인앱 '복습' 화면만
+            # 사용한다(다중 사용자 퀴즈가 개발자 단일 채널로 쏟아지는 것 방지).
+            if os.getenv("SLACK_ENABLED", "").lower() in ("1", "true", "yes"):
+                from .auth import get_quiz_result
+                quiz = get_quiz_result(quiz_result["id"])
+                if quiz:
+                    await post_quiz_to_slack(quiz)
 
             mark_completion_generated(comp["id"], quiz_result["id"])
             results.append({"completion_id": comp["id"], "status": "generated", "quiz_id": quiz_result["id"]})

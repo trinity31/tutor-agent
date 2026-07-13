@@ -53,6 +53,7 @@ FILE_SEARCH_STORE_NAME=      # Gemini File Search Store (선택)
 DEFAULT_USER_ID=             # 기본 사용자 ID (선택)
 
 # Slack 연동 (선택 — 없으면 Slack 기능 비활성)
+SLACK_ENABLED=               # 1이면 일일 복습 퀴즈를 Slack에도 전송(기본 off — 인앱 '복습'만)
 SLACK_BOT_TOKEN=             # Slack Bot OAuth 토큰
 SLACK_SIGNING_SECRET=        # Slack 요청 서명 시크릿
 SLACK_CHANNEL_ID=            # 퀴즈 전송 채널 ID
