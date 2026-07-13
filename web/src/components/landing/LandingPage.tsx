@@ -9,8 +9,8 @@ const FEATURES = [
   },
   {
     icon: '🔁',
-    title: '복습 루프',
-    desc: '잊을 때쯤 다시 물어봐 주는 퀴즈로, 흐릿해진 기억을 다시 또렷하게.',
+    title: '복습 퀴즈',
+    desc: '학습을 완료하면 다음 날 복습 퀴즈가 배달돼, 배운 내용을 한 번 더 점검해요.',
   },
   {
     icon: '💬',
@@ -55,8 +55,8 @@ export default function LandingPage() {
             교재를 귀로 정독하세요
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-warm-600 sm:text-lg">
-            내 PDF 강의자료를 낭독으로 듣고, 잊을 때쯤 다시 물어봐 주는 학습
-            루프. 방송대·사이버대·자격증 공부를 귀로 이어가세요.
+            내 PDF 강의자료를 낭독으로 듣고, 학습을 마치면 다음 날 복습 퀴즈가
+            배달됩니다. 방송대·사이버대·자격증 공부를 귀로 이어가세요.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
