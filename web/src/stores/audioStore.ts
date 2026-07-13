@@ -13,6 +13,10 @@ import {
 const RATE_KEY = 'tutor-audio-rate';
 const VOICE_KEY = 'tutor-audio-voice';
 const POLL_INTERVAL = 3000;
+// 재접속 시 마지막으로 듣던 자료로 바로 복귀하기 위한 키
+export const LAST_MATERIAL_KEY = 'tutor-last-material';
+const sectionKey = (classId: string, materialName: string) =>
+  `tutor-audio-section:${classId}:${materialName}`;
 
 /** 이어듣기용 재생 위치 localStorage 키 */
 export function audioPositionKey(
@@ -75,6 +79,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   init: async (classId: string, materialName: string) => {
     pollGeneration++;
+    // 재접속 복귀용: 마지막으로 연 자료를 기록
+    localStorage.setItem(LAST_MATERIAL_KEY, JSON.stringify({ classId, materialName }));
     set({
       classId,
       materialName,
@@ -87,10 +93,15 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     try {
       const res = await getAudioSections(classId, materialName);
       const voice = get().voice in res.voices ? get().voice : res.default_voice;
+      // 마지막으로 듣던 차시로 복귀 (없거나 사라졌으면 첫 차시)
+      const savedSection = localStorage.getItem(sectionKey(classId, materialName));
+      const section = res.sections.some((s) => s.section === savedSection)
+        ? savedSection
+        : (res.sections[0]?.section ?? null);
       set({
         sections: res.sections,
         voices: res.voices,
-        section: res.sections[0]?.section ?? null,
+        section,
         voice,
       });
       await get().requestGeneration();
@@ -101,6 +112,10 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   selectSection: (section: string) => {
     if (section === get().section) return;
+    const { classId, materialName } = get();
+    if (classId && materialName) {
+      localStorage.setItem(sectionKey(classId, materialName), section);
+    }
     set({ section, manifest: null, fileUrl: null, currentChunk: -1 });
     get().requestGeneration();
   },
