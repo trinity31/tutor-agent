@@ -916,6 +916,7 @@ async def run_scheduled_quiz_generation() -> list[dict]:
     logger.info(f"[크론] 예약 퀴즈 대상: {len(completions)}건 (date={today})")
 
     results = []
+    email_notify: dict[str, list[str]] = {}  # 사용자별 복습 퀴즈 제목 → 메일 1통
     for comp in completions:
         try:
             wrong_questions = comp.get("wrong_questions", [])
@@ -981,10 +982,17 @@ async def run_scheduled_quiz_generation() -> list[dict]:
                     await post_quiz_to_slack(quiz)
 
             mark_completion_generated(comp["id"], quiz_result["id"])
+            email_notify.setdefault(comp["user_email"], []).append(quiz_title)
             results.append({"completion_id": comp["id"], "status": "generated", "quiz_id": quiz_result["id"]})
 
         except Exception as e:
             logger.error(f"[크론] 퀴즈 생성 실패: {comp['id']} — {e}")
             results.append({"completion_id": comp["id"], "status": "error", "reason": str(e)})
+
+    # 사용자별 복습 알림 메일 (SMTP 미설정 시 각 호출이 조용히 스킵)
+    from .mailer import send_review_email
+
+    for email, titles in email_notify.items():
+        send_review_email(email, titles)
 
     return results

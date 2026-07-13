@@ -61,6 +61,14 @@ SLACK_CHANNEL_ID=            # 퀴즈 전송 채널 ID
 # 크론 (선택)
 CRON_SECRET=                 # 예약 퀴즈 생성 엔드포인트 인증키
 
+# 이메일 복습 알림 (선택 — SMTP_HOST 없으면 발송 스킵)
+SMTP_HOST=                   # 예: smtp.gmail.com | smtp.resend.com
+SMTP_PORT=                   # 기본 587 (STARTTLS)
+SMTP_USER=                   # 예: you@gmail.com | resend
+SMTP_PASSWORD=               # Gmail 앱 비밀번호 | Resend API 키
+MAIL_FROM=                   # 발신 주소 (없으면 SMTP_USER)
+APP_BASE_URL=                # 메일 링크 기준 URL (기본 https://ai-tutor.davinci-apps.online)
+
 # 원문 낭독 TTS (선택)
 GCP_TTS_API_KEY=             # Cloud Text-to-Speech 전용 키 (없으면 GOOGLE_API_KEY 사용)
 TTS_ENGINE=                  # gcp(기본) | gemini
