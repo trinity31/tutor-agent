@@ -699,6 +699,31 @@ async def update_review_notes(quiz_id: str, body: UpdateReviewNotesRequest, user
     return {"status": "updated"}
 
 
+class CompleteReviewRequest(BaseModel):
+    answers: list[dict]
+    score: int
+    wrong_questions: list[dict] = []
+
+
+@app.patch("/api/quiz-results/{quiz_id}/complete")
+async def complete_review_quiz(
+    quiz_id: str, body: CompleteReviewRequest, user: dict = Depends(get_current_user)
+):
+    """예약 복습 퀴즈를 앱에서 풀고 완료 처리합니다(in_progress → completed)."""
+    quiz = get_quiz_result(quiz_id)
+    if not quiz or quiz["user_email"] != user["email"]:
+        raise HTTPException(status_code=404, detail="퀴즈를 찾을 수 없습니다.")
+    update_quiz_result(
+        quiz_id,
+        status="completed",
+        answers=body.answers,
+        score=body.score,
+        total=len(body.answers),
+        wrong_questions=body.wrong_questions,
+    )
+    return {"status": "completed"}
+
+
 # --- Completions Endpoints ---
 
 

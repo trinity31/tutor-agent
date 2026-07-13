@@ -22,6 +22,19 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '요청에 실패했습니다.' }));
+    throw new Error(err.detail || '요청에 실패했습니다.');
+  }
+  return res.json();
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: authHeaders(),
@@ -97,6 +110,32 @@ export async function saveQuizResult(data: {
     '/quiz-results',
     data,
   );
+}
+
+/** 서버에 저장된 퀴즈 결과 1건 (복습 대기·완료 공통) */
+export interface QuizResultRow {
+  id: string;
+  class_id: string;
+  material_name: string;
+  quiz_title: string;
+  questions: import('../stores/chatStore').QuizQuestion[];
+  status: string; // 'in_progress'(복습 대기) | 'completed'
+  type: string;
+  score: number;
+  total: number;
+  completed_at: string;
+}
+
+export async function getQuizResults(classId?: string) {
+  const q = classId ? `?class_id=${encodeURIComponent(classId)}` : '';
+  return apiGet<{ results: QuizResultRow[] }>(`/quiz-results${q}`);
+}
+
+export async function completeReviewQuiz(
+  quizId: string,
+  data: { answers: unknown[]; score: number; wrong_questions?: unknown[] },
+) {
+  return apiPatch<{ status: string }>(`/quiz-results/${quizId}/complete`, data);
 }
 
 export async function scheduleQuizRetry(

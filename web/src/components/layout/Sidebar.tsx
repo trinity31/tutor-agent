@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   markComplete,
   getMaterialStatus,
@@ -11,10 +12,13 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useReviewStore } from '../../stores/reviewStore';
 
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const statusVersion = useUIStore((s) => s.statusVersion);
   const bumpStatus = useUIStore((s) => s.bumpStatus);
+  const navigate = useNavigate();
+  const reviewCount = useReviewStore((s) => s.pending.length);
   const { user, logout } = useAuthStore();
   const { newChat } = useChatStore();
   const {
@@ -202,6 +206,21 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           >
             <span className="text-lg">+</span>
             새 대화
+          </button>
+          <button
+            onClick={() => {
+              navigate('/review');
+              onClose();
+            }}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl border border-warm-200 px-4 py-2.5 text-sm font-semibold text-warm-700 hover:bg-warm-50 active:scale-[0.98] transition-all"
+          >
+            <span className="text-base">🔁</span>
+            복습
+            {reviewCount > 0 && (
+              <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-primary-500 px-1.5 text-[11px] font-bold text-white">
+                {reviewCount}
+              </span>
+            )}
           </button>
         </div>
 

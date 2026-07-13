@@ -1,8 +1,19 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useUIStore } from '../../stores/uiStore';
+import { useReviewStore } from '../../stores/reviewStore';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, openSidebar, closeSidebar } = useUIStore();
+  const navigate = useNavigate();
+  const reviewCount = useReviewStore((s) => s.pending.length);
+  const loadReviews = useReviewStore((s) => s.load);
+
+  // 복습 대기 개수(배지) — 앱 진입 시 1회 로드
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
 
   return (
     <div className="flex h-dvh w-full">
@@ -25,6 +36,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
           <h1 className="ml-3 text-base font-bold text-warm-900">AI Tutor</h1>
+          <button
+            onClick={() => navigate('/review')}
+            className="relative ml-auto flex items-center gap-1.5 rounded-full border border-warm-200 px-3 py-1.5 text-xs font-bold text-warm-700 active:scale-95 transition-transform"
+            title="복습"
+          >
+            🔁 복습
+            {reviewCount > 0 && (
+              <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary-500 px-1 text-[10px] font-bold text-white">
+                {reviewCount}
+              </span>
+            )}
+          </button>
         </header>
 
         {children}

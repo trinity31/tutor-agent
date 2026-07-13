@@ -6,6 +6,7 @@ import AppShell from './components/layout/AppShell';
 import ChatArea from './components/chat/ChatArea';
 import IosInstallBanner from './components/pwa/IosInstallBanner';
 import LandingPage from './components/landing/LandingPage';
+import ReviewPage from './components/review/ReviewPage';
 
 function AppHome() {
   return (
@@ -36,6 +37,10 @@ export default function App() {
       <Route
         path="/login"
         element={user ? <Navigate to="/" replace /> : <AuthPage />}
+      />
+      <Route
+        path="/review"
+        element={user ? <ReviewPage /> : <Navigate to="/" replace />}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
