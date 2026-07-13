@@ -50,7 +50,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const [noteSaving, setNoteSaving] = useState(false);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [confirmDeleteClassId, setConfirmDeleteClassId] = useState<string | null>(null);
-  const [completingMaterial, setCompletingMaterial] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -125,14 +124,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const handleMarkComplete = async (classId: string, name: string) => {
-    setCompletingMaterial(name);
-    try {
-      await markComplete({ class_id: classId, material_name: name });
-      setCompletedMaterials((prev) => [...prev, name]);
-      bumpStatus(); // 홈의 학습완료 버튼 상태도 동기화
-    } catch { /* ignore */ }
-    setCompletingMaterial(null);
+  const handleMarkComplete = (classId: string, name: string) => {
+    // 낙관적 업데이트 — 누르는 즉시 '완료' 배지, API는 백그라운드
+    setCompletedMaterials((prev) => [...prev, name]);
+    bumpStatus(); // 홈의 학습완료 버튼 상태도 동기화
+    markComplete({ class_id: classId, material_name: name }).catch(() => {
+      // 실패 시 되돌림
+      setCompletedMaterials((prev) => prev.filter((n) => n !== name));
+      bumpStatus();
+    });
   };
 
   const handleSaveNote = async (classId: string, materialName: string) => {
@@ -344,7 +344,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                 ) : (
                                   <button
                                     onClick={() => handleMarkComplete(cls.id, name)}
-                                    disabled={completingMaterial === name}
                                     className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors ${
                                       inProgressMaterials.includes(name)
                                         ? 'bg-accent-50 text-accent-500'
@@ -352,11 +351,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                     }`}
                                     title="탭하여 학습 완료로 표시"
                                   >
-                                    {completingMaterial === name
-                                      ? '처리중'
-                                      : inProgressMaterials.includes(name)
-                                        ? '학습중'
-                                        : '미시작'}
+                                    {inProgressMaterials.includes(name) ? '학습중' : '미시작'}
                                   </button>
                                 )}
 

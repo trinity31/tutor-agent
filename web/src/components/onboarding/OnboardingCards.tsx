@@ -64,7 +64,6 @@ export default function OnboardingCards({
   const statusVersion = useUIStore((s) => s.statusVersion);
   const { createClass, selectClass, materials, selectedMaterials, uploadMaterial } = useClassStore();
   const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
-  const [completing, setCompleting] = useState(false);
   const [examples, setExamples] = useState<Record<string, string>>({});
   const [loadingExamples, setLoadingExamples] = useState(false);
   const [newClassName, setNewClassName] = useState("");
@@ -102,21 +101,25 @@ export default function OnboardingCards({
   const allCompleted =
     selectedMaterials.length > 0 && selectedMaterials.every((m) => completedSet.has(m));
 
-  const handleComplete = async () => {
-    if (!selectedClassId || completing) return;
+  const handleComplete = () => {
+    if (!selectedClassId) return;
+    const classId = selectedClassId;
     const targets = selectedMaterials.filter((m) => !completedSet.has(m));
     if (targets.length === 0) return;
-    setCompleting(true);
-    try {
-      for (const m of targets) {
-        await markComplete({ class_id: selectedClassId, material_name: m });
-      }
-      setCompletedSet((prev) => new Set([...prev, ...targets]));
-      bumpStatus(); // 사이드바 배지 동기화
-    } catch {
-      /* ignore */
-    }
-    setCompleting(false);
+    // 낙관적 업데이트 — 누르는 즉시 '학습 완료됨' 표시, API는 백그라운드
+    setCompletedSet((prev) => new Set([...prev, ...targets]));
+    bumpStatus(); // 사이드바 배지 동기화
+    Promise.all(
+      targets.map((m) => markComplete({ class_id: classId, material_name: m })),
+    ).catch(() => {
+      // 실패 시 되돌림
+      setCompletedSet((prev) => {
+        const next = new Set(prev);
+        targets.forEach((t) => next.delete(t));
+        return next;
+      });
+      bumpStatus();
+    });
   };
 
   const [uploadMsg, setUploadMsg] = useState("");
@@ -332,10 +335,9 @@ export default function OnboardingCards({
           ) : (
             <button
               onClick={handleComplete}
-              disabled={completing}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-500 py-3.5 text-[15px] font-bold text-white shadow-[0_8px_18px_-8px_rgba(18,184,134,0.6)] transition-transform active:scale-[0.99] disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-500 py-3.5 text-[15px] font-bold text-white shadow-[0_8px_18px_-8px_rgba(18,184,134,0.6)] transition-transform active:scale-[0.99]"
             >
-              {completing ? "처리 중..." : "학습 완료"}
+              학습 완료
             </button>
           )}
           <p className="mt-2 text-center text-[11px] text-warm-400">
