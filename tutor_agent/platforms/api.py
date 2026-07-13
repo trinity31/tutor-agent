@@ -352,6 +352,7 @@ def _check_voice(voice: str):
 class AudioRequest(BaseModel):
     section: str
     voice: str = DEFAULT_VOICE
+    force: bool = False  # True면 캐시 무시하고 재생성
 
 
 @app.get("/api/classes/{class_id}/materials/{material_name}/audio/sections")
@@ -383,14 +384,14 @@ async def material_audio_request(
     if body.section not in {s["section"] for s in sections}:
         raise HTTPException(status_code=400, detail="유효하지 않은 섹션입니다.")
 
-    # 캐시된 오디오 재생은 한도와 무관 — 새로 생성해야 할 때만 검사
+    # 캐시된 오디오 재생은 한도와 무관 — 새로 생성해야 할 때(재생성 포함)만 검사
     status = get_audio_status(user["email"], class_id, material_name, body.section, body.voice)
-    if status["status"] != "ready":
+    if body.force or status["status"] != "ready":
         if over := check_limit(user["email"], "tts_chars_monthly"):
             raise HTTPException(status_code=429, detail=over)
 
     result = request_audio(
-        user["email"], class_id, material_name, body.section, body.voice
+        user["email"], class_id, material_name, body.section, body.voice, force=body.force
     )
     if result.pop("_start", False):
         background_tasks.add_task(

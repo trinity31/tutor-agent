@@ -189,10 +189,11 @@ export async function requestAudio(
   materialName: string,
   section: string,
   voice: string,
+  force = false,
 ) {
   return apiPost<{ status: AudioStatus; duration?: number }>(
     audioBase(classId, materialName),
-    { section, voice },
+    { section, voice, force },
   );
 }
 

@@ -461,9 +461,17 @@ def _parse_section(section: str) -> tuple[int, int] | None:
 
 
 def request_audio(
-    user_id: str, class_id: str, material_name: str, section: str, voice: str
+    user_id: str,
+    class_id: str,
+    material_name: str,
+    section: str,
+    voice: str,
+    force: bool = False,
 ) -> dict:
     """오디오 생성을 요청합니다. 캐시가 있으면 즉시 ready를 반환합니다.
+
+    force=True면 캐시가 ready여도 새 파이프라인으로 재생성한다(추출·정제·
+    하이라이트 개선을 기존 자료에 반영할 때). 생성 중이면 그대로 진행 상태.
 
     Returns:
         {"status": ..., "duration": ...} — "_start"가 True면 호출자가
@@ -474,6 +482,11 @@ def request_audio(
     material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if asset:
+        # 강제 재생성: ready/failed 에셋을 pending으로 되돌려 다시 생성
+        if force:
+            if reset_audio_asset(asset["id"]):
+                return {"status": "pending", "_start": True}
+            return {"status": asset["status"]}  # 생성 중이면 그대로
         if asset["status"] == "ready" and Path(asset["file_path"]).exists():
             return {"status": "ready", "duration": asset["duration"]}
         if asset["status"] in ("pending", "generating"):

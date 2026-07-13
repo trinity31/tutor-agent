@@ -42,7 +42,8 @@ interface AudioState {
   setVoice: (voice: string) => void;
   setRate: (rate: number) => void;
   setCurrentChunk: (idx: number) => void;
-  requestGeneration: () => Promise<void>;
+  requestGeneration: (force?: boolean) => Promise<void>;
+  regenerate: () => void;
   prefetchNext: () => void;
   advanceToNext: () => boolean;
   reset: () => void;
@@ -113,7 +114,13 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     if (idx !== get().currentChunk) set({ currentChunk: idx });
   },
 
-  requestGeneration: async () => {
+  regenerate: () => {
+    // 캐시된 오디오를 무시하고 최신 파이프라인으로 다시 생성
+    set({ manifest: null, fileUrl: null, currentChunk: -1 });
+    get().requestGeneration(true);
+  },
+
+  requestGeneration: async (force = false) => {
     const { classId, materialName, section, voice } = get();
     if (!classId || !materialName || !section) return;
     const generation = ++pollGeneration;
@@ -132,7 +139,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     };
 
     try {
-      const res = await requestAudio(classId, materialName, section, voice);
+      const res = await requestAudio(classId, materialName, section, voice, force);
       if (generation !== pollGeneration) return;
       if (res.status === 'ready') {
         await finishReady();

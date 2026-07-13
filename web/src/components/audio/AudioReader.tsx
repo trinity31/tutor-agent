@@ -41,6 +41,7 @@ export default function AudioReader({ classId, materialName }: Props) {
     setRate,
     setCurrentChunk,
     requestGeneration,
+    regenerate,
   } = useAudioStore();
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -397,7 +398,7 @@ export default function AudioReader({ classId, materialName }: Props) {
           <div className="space-y-3">
             <p className="text-sm text-error-500">{error}</p>
             <button
-              onClick={requestGeneration}
+              onClick={() => requestGeneration()}
               className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 transition-colors"
             >
               다시 시도
@@ -601,6 +602,28 @@ export default function AudioReader({ classId, materialName }: Props) {
                 </div>
               </div>
             )}
+
+            {/* 낭독 재생성 — 캐시를 지우고 최신 추출·발음·하이라이트로 다시 생성 */}
+            <div className="mt-4 border-t border-warm-100 pt-3">
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      '이 차시 낭독을 최신 방식으로 다시 만들까요? 생성에 잠시 걸립니다.',
+                    )
+                  ) {
+                    setSheetOpen(false);
+                    regenerate();
+                  }
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-warm-200 py-2.5 text-sm font-semibold text-warm-600 active:scale-[0.99] transition-transform"
+              >
+                ↻ 이 차시 낭독 재생성
+              </button>
+              <p className="mt-1.5 text-center text-[11px] text-warm-400">
+                추출·발음·하이라이트 개선을 반영합니다
+              </p>
+            </div>
           </div>
         </>
       )}
