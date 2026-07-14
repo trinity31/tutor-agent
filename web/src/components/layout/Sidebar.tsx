@@ -288,7 +288,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                         ? 'bg-primary-50 font-bold text-warm-900'
                                         : 'text-warm-600 hover:bg-warm-50'
                                   }`}
-                                  title={isIndexing ? '인덱싱 중...' : name}
+                                  title={isIndexing ? '준비 중...' : name}
                                 >
                                   <span className="truncate">{name}</span>
                                 </button>
@@ -296,7 +296,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                 {/* 상태 배지 — 미완료는 탭하면 학습 완료 처리 */}
                                 {isIndexing ? (
                                   <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-500 animate-pulse">
-                                    인덱싱
+                                    준비중
                                   </span>
                                 ) : isCompleted ? (
                                   <span className="shrink-0 rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-bold text-primary-600">

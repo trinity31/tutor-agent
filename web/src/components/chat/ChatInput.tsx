@@ -41,7 +41,7 @@ export default function ChatInput({
       <div className="border-t border-warm-100 bg-white px-4 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 text-sm font-medium text-warm-500">
           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-warm-300 border-t-primary-500" />
-          자료 준비 중… 인덱싱이 끝나면 대화할 수 있어요
+          자료 준비 중… 준비가 끝나면 대화할 수 있어요
         </div>
       </div>
     );
