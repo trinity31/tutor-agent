@@ -188,15 +188,15 @@ export default function ChatArea() {
       .join(' ')
       .trim();
     const composed = pageText
-      ? `다음은 교재 ${page}페이지 내용입니다:\n"""\n${pageText}\n"""\n\n이 페이지 내용에 대한 질문: ${question}`
-      : `교재 ${page}페이지에 대한 질문: ${question}`;
+      ? `다음은 교재 ${page}페이지 내용입니다:\n"""\n${pageText}\n"""\n\n위 페이지를 참고해 답해 주세요. 페이지에 없으면 일반 지식으로 설명해도 됩니다.\n질문: ${question}`
+      : `교재 ${page}페이지에 대한 질문(자료에 없으면 일반 지식으로 답해도 됨): ${question}`;
     handleSend(composed);
     if (isMobile) setIndexPanelOpen(false); // 모바일은 패널을 닫아 답변이 보이게
   };
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="relative flex flex-1 flex-col overflow-hidden">
       {/* Context bar */}
       {selectedClass && (
         <div className="flex items-center gap-2 border-b border-warm-100 bg-primary-50/50 px-4 py-2">
@@ -278,6 +278,16 @@ export default function ChatArea() {
           </div>
         )}
       </div>
+
+      {/* 듣기로 바로가기 — 컴포저 위 오른쪽 플로팅 (자료 선택됨 + 패널 닫힘) */}
+      {indexableMaterial && !indexPanelOpen && !showQuizQuestion && !showQuizResult && (
+        <button
+          onClick={() => openPanel('audio')}
+          className="absolute right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(18,184,134,0.6)] active:scale-95 transition-transform"
+        >
+          🎧 듣기
+        </button>
+      )}
 
       {/* Input */}
       {!showQuizQuestion && !showQuizResult && (
