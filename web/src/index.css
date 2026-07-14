@@ -55,6 +55,12 @@
 
 /* --- Base Styles --- */
 
+/* 전체 글자 크기 상향 — 기본 16px → 19px(약 +19%). Tailwind가 rem 기반이라
+   텍스트가 비례해 커진다(가독성 개선 요청). */
+html {
+  font-size: 118.75%;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
