@@ -28,9 +28,11 @@ export default function ChatArea() {
     clearError,
   } = useChatStore();
 
-  const { classes, selectedClassId, selectedMaterials, materials, selectClass, toggleMaterial } =
+  const { classes, selectedClassId, selectedMaterials, materials, selectClass, toggleMaterial, indexingMaterials } =
     useClassStore();
   const selectedClass = classes.find((c) => c.id === selectedClassId);
+  // 선택 자료가 업로드·인덱싱 중이면 대화 비활성화 ('준비중')
+  const isPreparing = selectedMaterials.some((m) => indexingMaterials.has(m));
 
   const indexableMaterial =
     selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
@@ -240,7 +242,15 @@ export default function ChatArea() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
-        {showOnboarding ? (
+        {isPreparing ? (
+          <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 text-center">
+            <span className="mb-4 inline-block h-9 w-9 animate-spin rounded-full border-[3px] border-warm-200 border-t-primary-500" />
+            <p className="text-base font-bold text-warm-900">자료를 준비하고 있어요</p>
+            <p className="mt-1.5 text-sm text-warm-500">
+              업로드한 강의자료를 분석·색인하는 중이에요. 잠시 후 낭독·질문·퀴즈를 시작할 수 있어요.
+            </p>
+          </div>
+        ) : showOnboarding ? (
           <OnboardingCards
             onSend={handleSend}
             hasClasses={classes.length > 0}
@@ -302,7 +312,7 @@ export default function ChatArea() {
       </div>
 
       {/* 듣기로 바로가기 — 컴포저 위 오른쪽 플로팅 (자료 선택됨 + 패널 닫힘) */}
-      {indexableMaterial && !indexPanelOpen && !showQuizQuestion && !showQuizResult && (
+      {indexableMaterial && !indexPanelOpen && !isPreparing && !showQuizQuestion && !showQuizResult && (
         <button
           onClick={() => openPanel('audio')}
           className="absolute right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(18,184,134,0.6)] active:scale-95 transition-transform"
@@ -322,6 +332,7 @@ export default function ChatArea() {
               : '메시지를 입력하세요'
           }
           inputDisabled={!selectedClassId}
+          preparing={isPreparing}
         />
       )}
       </div>

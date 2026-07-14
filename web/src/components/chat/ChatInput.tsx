@@ -5,13 +5,16 @@ export default function ChatInput({
   disabled,
   placeholder = '메시지를 입력하세요',
   inputDisabled = false,
+  preparing = false,
 }: {
   onSend: (text: string) => void;
   disabled: boolean;
   placeholder?: string;
   inputDisabled?: boolean;
+  /** 업로드·인덱싱 중 — 대화 비활성화 + '준비중' 표시 */
+  preparing?: boolean;
 }) {
-  const isDisabled = disabled || inputDisabled;
+  const isDisabled = disabled || inputDisabled || preparing;
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -32,6 +35,17 @@ export default function ChatInput({
       handleSubmit();
     }
   };
+
+  if (preparing) {
+    return (
+      <div className="border-t border-warm-100 bg-white px-4 py-4">
+        <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 text-sm font-medium text-warm-500">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-warm-300 border-t-primary-500" />
+          자료 준비 중… 인덱싱이 끝나면 대화할 수 있어요
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-warm-100 bg-white px-4 py-3">
