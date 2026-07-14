@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  markComplete,
-  getMaterialStatus,
-  saveStudyNote,
-  getStudyNotes,
-  deleteStudyNote,
-  type StudyNote,
-} from '../../api/client';
+import { markComplete, getMaterialStatus } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -44,11 +37,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   // 자료별 상태
   const [completedMaterials, setCompletedMaterials] = useState<string[]>([]);
   const [inProgressMaterials, setInProgressMaterials] = useState<string[]>([]);
-  const [notes, setNotes] = useState<StudyNote[]>([]);
-  const [noteText, setNoteText] = useState('');
-  const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [confirmDeleteClassId, setConfirmDeleteClassId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -73,19 +61,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       setInProgressMaterials([]);
     }
   }, [selectedClassId, statusVersion]);
-
-  // 선택된 자료 변경 시 노트 로드
-  useEffect(() => {
-    if (selectedClassId && selectedMaterials.length === 1) {
-      getStudyNotes(selectedClassId, selectedMaterials[0])
-        .then((res) => setNotes(res.notes))
-        .catch(() => setNotes([]));
-    } else {
-      setNotes([]);
-    }
-    setShowNoteFor(null);
-    setNoteText('');
-  }, [selectedClassId, selectedMaterials]);
 
   const handleCreateClass = async () => {
     const name = newClassName.trim();
@@ -133,22 +108,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       setCompletedMaterials((prev) => prev.filter((n) => n !== name));
       bumpStatus();
     });
-  };
-
-  const handleSaveNote = async (classId: string, materialName: string) => {
-    if (!noteText.trim()) return;
-    setNoteSaving(true);
-    try {
-      const note = await saveStudyNote({
-        class_id: classId,
-        material_name: materialName,
-        content: noteText.trim(),
-      });
-      setNotes((prev) => [note, ...prev]);
-      setNoteText('');
-      setShowNoteFor(null);
-    } catch { /* ignore */ }
-    setNoteSaving(false);
   };
 
   // 이름 미설정(백엔드가 name을 email로 저장) 시 이메일 아이디를 이름으로
@@ -355,82 +314,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                   </button>
                                 )}
 
-                                {/* 메모 */}
-                                {isChecked && (
-                                  <button
-                                    onClick={() => setShowNoteFor(showNoteFor === name ? null : name)}
-                                    className="shrink-0 px-1.5 py-0.5 text-base text-primary-600 hover:text-primary-700 transition-colors"
-                                    title="메모"
-                                  >
-                                    ✎
-                                  </button>
-                                )}
                               </div>
-
-                              {/* 노트 입력/목록 (선택된 자료에만) */}
-                              {isChecked && showNoteFor === name && (
-                                <div className="ml-5 mt-1 mb-1 space-y-1.5">
-                                  <div className="space-y-1.5">
-                                    <textarea
-                                      value={noteText}
-                                      onChange={(e) => setNoteText(e.target.value)}
-                                      placeholder="기억할 내용을 메모하세요"
-                                      rows={2}
-                                      className="w-full rounded-md border border-warm-200 bg-warm-50 px-2 py-1.5 text-xs text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
-                                    />
-                                    <div className="flex gap-1.5">
-                                      <button
-                                        onClick={() => { setShowNoteFor(null); setNoteText(''); }}
-                                        className="flex-1 rounded-md border border-warm-200 py-1 text-xs text-warm-600"
-                                      >
-                                        취소
-                                      </button>
-                                      <button
-                                        onClick={() => handleSaveNote(cls.id, name)}
-                                        disabled={!noteText.trim() || noteSaving}
-                                        className="flex-1 rounded-md bg-primary-500 py-1 text-xs font-medium text-white disabled:opacity-30"
-                                      >
-                                        저장
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* 저장된 노트 — 클릭 시 펼치기 */}
-                              {isChecked && notes.length > 0 && (
-                                <div className="ml-5 mt-1 mb-1 space-y-0.5">
-                                  {notes.map((n) => {
-                                    const isExpNote = expandedNoteId === n.id;
-                                    return (
-                                      <div key={n.id} className="group rounded-md bg-warm-50 px-2 py-1">
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() => setExpandedNoteId(isExpNote ? null : n.id)}
-                                            className="flex flex-1 items-center gap-1 text-left min-w-0"
-                                          >
-                                            <span className="text-xs text-warm-400 shrink-0">{isExpNote ? '▾' : '▸'}</span>
-                                            <p className="flex-1 text-xs text-warm-600 truncate">{n.content}</p>
-                                          </button>
-                                          <button
-                                            onClick={async () => {
-                                              await deleteStudyNote(n.id);
-                                              setNotes((prev) => prev.filter((x) => x.id !== n.id));
-                                            }}
-                                            className="shrink-0 px-1 text-sm text-warm-300 hover:text-error-500 transition-colors"
-                                            title="삭제"
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                        {isExpNote && (
-                                          <p className="mt-1 text-xs text-warm-700 whitespace-pre-wrap pl-3">{n.content}</p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
                             </div>
                           );
                         })}

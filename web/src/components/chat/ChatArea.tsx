@@ -35,7 +35,7 @@ export default function ChatArea() {
   const indexableMaterial =
     selectedClassId && selectedMaterials.length === 1 ? selectedMaterials[0] : null;
   const [indexPanelOpen, setIndexPanelOpen] = useState(true);
-  const [panelMode, setPanelMode] = useState<'index' | 'audio'>('index');
+  const [panelMode, setPanelMode] = useState<'index' | 'audio' | 'note'>('index');
 
   // 과외·Q&A·퀴즈·인덱스·듣기 중 하나라도 하면 '학습중'으로 기록 (자료당 세션 1회)
   const markedRef = useRef<Set<string>>(new Set());
@@ -47,10 +47,10 @@ export default function ChatArea() {
     markMaterialStarted(selectedClassId, material);
   };
 
-  const openPanel = (mode: 'index' | 'audio') => {
+  const openPanel = (mode: 'index' | 'audio' | 'note') => {
     setPanelMode(mode);
     setIndexPanelOpen(true);
-    markStarted(indexableMaterial); // 인덱스·듣기
+    markStarted(indexableMaterial); // 인덱스·듣기·메모
   };
 
   // 모바일(<md)에서는 패널을 전체 화면 오버레이로 띄운다

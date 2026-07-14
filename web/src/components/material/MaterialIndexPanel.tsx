@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getMaterialIndex, regenerateMaterialIndex } from '../../api/client';
 import AudioReader from '../audio/AudioReader';
+import StudyNotes from './StudyNotes';
+
+type PanelMode = 'index' | 'audio' | 'note';
 
 interface Props {
   classId: string;
   materialName: string;
   onClose: () => void;
-  /** 패널이 처음 열릴 때 보여줄 모드 (인덱스/듣기 카드에서 지정) */
-  initialMode?: 'index' | 'audio';
+  /** 패널이 처음 열릴 때 보여줄 모드 (인덱스/듣기/메모 카드에서 지정) */
+  initialMode?: PanelMode;
   /** 원본 뷰 "이 페이지에서 질문" — 페이지 번호·질문을 채팅으로 보낸다 */
   onAskPage?: (page: number, question: string) => void;
 }
@@ -23,7 +26,7 @@ export default function MaterialIndexPanel({
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'not_ready' | 'error'>('loading');
   const [regenerating, setRegenerating] = useState(false);
-  const [mode, setMode] = useState<'index' | 'audio'>(initialMode);
+  const [mode, setMode] = useState<PanelMode>(initialMode);
 
   useEffect(() => {
     setMode(initialMode);
@@ -69,7 +72,7 @@ export default function MaterialIndexPanel({
       <header className="flex items-center justify-between border-b border-warm-100 bg-white px-4 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-warm-500">
-            {mode === 'audio' ? '원문 낭독' : '학습 인덱스'}
+            {mode === 'audio' ? '원문 낭독' : mode === 'note' ? '학습 메모' : '학습 인덱스'}
           </p>
           <p className="truncate text-sm font-medium text-warm-800" title={materialName}>
             {materialName}
@@ -104,7 +107,11 @@ export default function MaterialIndexPanel({
       </header>
 
       {/* Content */}
-      {mode === 'audio' ? (
+      {mode === 'note' ? (
+        <div className="flex-1 overflow-hidden">
+          <StudyNotes classId={classId} materialName={materialName} />
+        </div>
+      ) : mode === 'audio' ? (
         <div className="flex-1 overflow-hidden">
           <AudioReader classId={classId} materialName={materialName} onAskPage={onAskPage} />
         </div>

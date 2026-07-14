@@ -58,7 +58,7 @@ export default function OnboardingCards({
   onSend: (text: string) => void;
   hasClasses: boolean;
   selectedClassId: string | null;
-  onOpenIndex?: (mode: 'index' | 'audio') => void;
+  onOpenIndex?: (mode: 'index' | 'audio' | 'note') => void;
 }) {
   const openSidebar = useUIStore((s) => s.openSidebar);
   const bumpStatus = useUIStore((s) => s.bumpStatus);
@@ -303,6 +303,19 @@ export default function OnboardingCards({
               <div className="min-w-0 flex-1">
                 <h3 className="text-[15px] font-extrabold text-warm-900">듣기</h3>
                 <p className="truncate text-xs text-warm-500">원문을 문장 하이라이트와 함께 낭독</p>
+              </div>
+              <span className="text-lg text-warm-300">›</span>
+            </button>
+            <button
+              onClick={() => onOpenIndex('note')}
+              className="flex w-full items-center gap-3 rounded-2xl border border-accent-400/30 bg-accent-300/15 p-3.5 text-left transition-all active:scale-[0.99]"
+            >
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-400 text-lg">
+                📝
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[15px] font-extrabold text-warm-900">메모</h3>
+                <p className="truncate text-xs text-warm-500">기억할 내용을 적어 두고 다시 보기</p>
               </div>
               <span className="text-lg text-warm-300">›</span>
             </button>
