@@ -1,6 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
-import { saveListenProgress, saveStudyNote } from '../../api/client';
+import {
+  saveListenProgress,
+  saveStudyNote,
+  getStudyNotes,
+  deleteStudyNote,
+  type StudyNote,
+} from '../../api/client';
 import { track } from '../../lib/analytics';
 
 // pdf.js 번들이 커서 PDF 뷰를 열 때만 로드
@@ -92,10 +98,19 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [askingText, setAskingText] = useState(false);
   const [askText, setAskText] = useState('');
   const [pdfPage, setPdfPage] = useState(1);
-  // "메모" — 학습 중 바로 메모 저장
+  // "메모" — 학습 중 바로 메모 저장 + 목록 조회
   const [askingNote, setAskingNote] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteFlash, setNoteFlash] = useState('');
+  const [notes, setNotes] = useState<StudyNote[]>([]);
+
+  // 메모 패널을 열면 저장된 메모 목록 로드
+  useEffect(() => {
+    if (!askingNote) return;
+    getStudyNotes(classId, materialName)
+      .then((r) => setNotes(r.notes))
+      .catch(() => setNotes([]));
+  }, [askingNote, classId, materialName]);
   const [viewMode, setViewMode] = useState<'text' | 'pdf'>(
     () => (localStorage.getItem(VIEW_KEY) === 'pdf' ? 'pdf' : 'text'),
   );
@@ -319,15 +334,24 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const submitNote = async () => {
     const c = noteText.trim();
     if (!c) return;
-    setAskingNote(false);
     setNoteText('');
     try {
-      await saveStudyNote({ class_id: classId, material_name: materialName, content: c });
+      const note = await saveStudyNote({
+        class_id: classId,
+        material_name: materialName,
+        content: c,
+      });
+      setNotes((prev) => [note, ...prev]); // 목록에 바로 반영(패널 유지)
       setNoteFlash('메모를 저장했어요');
     } catch {
       setNoteFlash('메모 저장에 실패했어요');
     }
     setTimeout(() => setNoteFlash(''), 1800);
+  };
+
+  const removeNote = (id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+    deleteStudyNote(id).catch(() => {});
   };
   // 총 페이지 수 — 마지막 섹션 ID("p25-31")의 끝 페이지에서 계산
   const numPages =
@@ -555,34 +579,56 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
         </div>
       )}
 
-      {/* 메모 입력바 (학습 중 바로 저장) */}
+      {/* 메모 패널 (학습 중 바로 저장 + 목록) */}
       {askingNote && (
-        <div className="flex flex-none items-center gap-2 border-t border-warm-200 bg-white p-2.5">
-          <input
-            autoFocus
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submitNote()}
-            placeholder="기억할 내용을 메모하기"
-            className="min-w-0 flex-1 rounded-xl border border-warm-200 bg-warm-50 px-3.5 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
-          />
-          <button
-            onClick={submitNote}
-            disabled={!noteText.trim()}
-            className="shrink-0 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-          >
-            저장
-          </button>
-          <button
-            onClick={() => {
-              setAskingNote(false);
-              setNoteText('');
-            }}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-warm-500 hover:bg-warm-100"
-            title="닫기"
-          >
-            ✕
-          </button>
+        <div className="flex flex-none flex-col border-t border-warm-200 bg-white">
+          <div className="flex items-center gap-2 p-2.5">
+            <input
+              autoFocus
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitNote()}
+              placeholder="기억할 내용을 메모하기"
+              className="min-w-0 flex-1 rounded-xl border border-warm-200 bg-warm-50 px-3.5 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
+            />
+            <button
+              onClick={submitNote}
+              disabled={!noteText.trim()}
+              className="shrink-0 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+            >
+              저장
+            </button>
+            <button
+              onClick={() => {
+                setAskingNote(false);
+                setNoteText('');
+              }}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-warm-500 hover:bg-warm-100"
+              title="닫기"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="max-h-44 space-y-1.5 overflow-y-auto px-2.5 pb-2.5">
+            {notes.length === 0 ? (
+              <p className="py-4 text-center text-xs text-warm-400">저장된 메모가 없어요.</p>
+            ) : (
+              notes.map((n) => (
+                <div key={n.id} className="flex items-start gap-2 rounded-lg bg-warm-50 px-2.5 py-1.5">
+                  <p className="flex-1 whitespace-pre-wrap break-words text-xs text-warm-700">
+                    {n.content}
+                  </p>
+                  <button
+                    onClick={() => removeNote(n.id)}
+                    className="shrink-0 px-0.5 text-warm-300 hover:text-error-500"
+                    title="삭제"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
