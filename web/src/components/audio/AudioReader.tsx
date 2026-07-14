@@ -86,6 +86,9 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 텍스트 뷰 "이 페이지에서 질문" (재생 페이지 기준)
+  const [askingText, setAskingText] = useState(false);
+  const [askText, setAskText] = useState('');
   const [viewMode, setViewMode] = useState<'text' | 'pdf'>(
     () => (localStorage.getItem(VIEW_KEY) === 'pdf' ? 'pdf' : 'text'),
   );
@@ -284,6 +287,14 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const hasPages = manifest?.chunks.some((c) => c.page != null) ?? false;
   const playbackPage =
     manifest?.chunks[Math.max(currentChunk, 0)]?.page ?? manifest?.chunks[0]?.page ?? 1;
+
+  const submitTextQuestion = () => {
+    const q = askText.trim();
+    if (!q || !onAskPage) return;
+    onAskPage(playbackPage, q);
+    setAskText('');
+    setAskingText(false);
+  };
   // 총 페이지 수 — 마지막 섹션 ID("p25-31")의 끝 페이지에서 계산
   const numPages =
     sections.reduce((max, s) => {
@@ -353,7 +364,16 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   return (
     <div className="relative flex h-full flex-col bg-white">
       {/* 상단: 텍스트 / 원본 세그먼트 (설정은 하단 배속 칩 → 시트로 이동) */}
-      <div className="flex items-center justify-center border-b border-warm-100 bg-white px-4 py-2">
+      <div className="relative flex items-center justify-center border-b border-warm-100 bg-white px-4 py-2">
+        {viewMode === 'text' && onAskPage && !askingText && (
+          <button
+            onClick={() => setAskingText(true)}
+            className="absolute right-3 flex items-center gap-1 rounded-full bg-warm-900/85 px-3 py-1.5 text-xs font-semibold text-white active:scale-95"
+            title="이 페이지에서 질문"
+          >
+            💬 질문
+          </button>
+        )}
         <div className="flex rounded-lg bg-warm-100 p-0.5">
           <button
             onClick={() => viewMode === 'pdf' && toggleView()}
@@ -457,6 +477,37 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
           </div>
         )}
       </div>
+      )}
+
+      {/* 텍스트 뷰 "이 페이지에서 질문" 입력바 (미니 플레이어 위) */}
+      {askingText && onAskPage && (
+        <div className="flex flex-none items-center gap-2 border-t border-warm-200 bg-white p-2.5">
+          <input
+            autoFocus
+            value={askText}
+            onChange={(e) => setAskText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submitTextQuestion()}
+            placeholder={`${playbackPage}페이지에 대해 질문하기`}
+            className="min-w-0 flex-1 rounded-xl border border-warm-200 bg-warm-50 px-3.5 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
+          />
+          <button
+            onClick={submitTextQuestion}
+            disabled={!askText.trim()}
+            className="shrink-0 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          >
+            질문
+          </button>
+          <button
+            onClick={() => {
+              setAskingText(false);
+              setAskText('');
+            }}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-warm-500 hover:bg-warm-100"
+            title="닫기"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* 미니 플레이어 — 진행바 + −15/재생/+15 + 배속칩(시트) */}
