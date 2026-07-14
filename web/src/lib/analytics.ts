@@ -39,6 +39,7 @@ export type AnalyticsEvent =
   | 'listen_start'
   | 'listen_session'
   | 'listen_complete_section'
+  | 'study_complete' // '학습 완료' 버튼 — 복습 루프 방아쇠
   | 'review_quiz_answered'; // T5(웹 복습)에서 연결
 
 export function track(event: AnalyticsEvent, props?: Record<string, unknown>): void {

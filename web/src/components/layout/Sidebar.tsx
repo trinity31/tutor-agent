@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { markComplete, getMaterialStatus } from '../../api/client';
+import { track } from '../../lib/analytics';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -103,6 +104,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     // 낙관적 업데이트 — 누르는 즉시 '완료' 배지, API는 백그라운드
     setCompletedMaterials((prev) => [...prev, name]);
     bumpStatus(); // 홈의 학습완료 버튼 상태도 동기화
+    track('study_complete', { class_id: classId, material_name: name, source: 'sidebar' });
     markComplete({ class_id: classId, material_name: name }).catch(() => {
       // 실패 시 되돌림
       setCompletedMaterials((prev) => prev.filter((n) => n !== name));

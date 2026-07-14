@@ -3,6 +3,7 @@ import { markComplete, getMaterialStatus } from "../../api/client";
 import { useClassStore } from "../../stores/classStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
+import { track } from "../../lib/analytics";
 
 const CARDS = [
   {
@@ -92,6 +93,9 @@ export default function OnboardingCards({
     // 낙관적 업데이트 — 누르는 즉시 '학습 완료됨' 표시, API는 백그라운드
     setCompletedSet((prev) => new Set([...prev, ...targets]));
     bumpStatus(); // 사이드바 배지 동기화
+    targets.forEach((m) =>
+      track('study_complete', { class_id: classId, material_name: m, source: 'home' }),
+    );
     Promise.all(
       targets.map((m) => markComplete({ class_id: classId, material_name: m })),
     ).catch(() => {
