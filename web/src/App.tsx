@@ -7,6 +7,7 @@ import ChatArea from './components/chat/ChatArea';
 import IosInstallBanner from './components/pwa/IosInstallBanner';
 import LandingPage from './components/landing/LandingPage';
 import ReviewPage from './components/review/ReviewPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
 
 function AppHome() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
         path="/login"
         element={user ? <Navigate to="/" replace /> : <AuthPage />}
       />
+      <Route path="/reset" element={<ResetPasswordPage />} />
       <Route
         path="/review"
         element={user ? <ReviewPage /> : <Navigate to="/" replace />}

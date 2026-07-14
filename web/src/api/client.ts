@@ -156,6 +156,14 @@ export async function getCompletedMaterials(classId: string) {
   return apiGet<{ materials: string[] }>(`/classes/${classId}/completed-materials`);
 }
 
+export function requestPasswordReset(email: string) {
+  return apiPost<{ message: string }>('/auth/request-reset', { email });
+}
+
+export function resetPassword(token: string, password: string) {
+  return apiPost<{ message: string }>('/auth/reset', { token, password });
+}
+
 export async function getMaterialStatus(classId: string) {
   return apiGet<{ completed: string[]; in_progress: string[] }>(
     `/classes/${classId}/material-status`,

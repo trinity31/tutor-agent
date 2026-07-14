@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { requestPasswordReset } from '../../api/client';
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -10,6 +11,11 @@ export default function AuthPage() {
   const [confirmPw, setConfirmPw] = useState('');
   const { login, register, loading, error, clearError } = useAuthStore();
 
+  // 비밀번호 찾기
+  const [forgot, setForgot] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLogin && password !== confirmPw) return;
@@ -18,6 +24,25 @@ export default function AuthPage() {
     } else {
       await register(email, password);
     }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setResetLoading(true);
+    try {
+      await requestPasswordReset(email.trim());
+    } catch {
+      /* 계정 존재 여부를 노출하지 않으려 성공/실패 동일 처리 */
+    }
+    setResetSent(true);
+    setResetLoading(false);
+  };
+
+  const backToLogin = () => {
+    setForgot(false);
+    setResetSent(false);
+    clearError();
   };
 
   return (
@@ -34,6 +59,53 @@ export default function AuthPage() {
 
         {/* Form Card */}
         <div className="rounded-2xl bg-white p-8 shadow-sm">
+          {forgot ? (
+            <div>
+              <h2 className="mb-1 text-lg font-bold text-warm-900">비밀번호 찾기</h2>
+              <p className="mb-5 text-sm text-warm-500">
+                가입한 이메일로 재설정 링크를 보내드립니다.
+              </p>
+              {resetSent ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-700">
+                    입력하신 이메일이 등록돼 있다면 재설정 링크를 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.
+                  </div>
+                  <button
+                    onClick={backToLogin}
+                    className="w-full rounded-xl border border-warm-200 py-3 text-sm font-semibold text-warm-600 hover:bg-warm-50"
+                  >
+                    로그인으로 돌아가기
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgot} className="space-y-4">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="email@example.com"
+                    required
+                    className="w-full rounded-xl border border-warm-200 bg-warm-50 px-4 py-3 text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 transition-all"
+                  />
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full rounded-xl bg-primary-500 py-3.5 text-base font-semibold text-white transition-all hover:bg-primary-600 active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {resetLoading ? '전송 중...' : '재설정 링크 받기'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={backToLogin}
+                    className="w-full text-sm text-warm-500 hover:text-warm-700"
+                  >
+                    로그인으로 돌아가기
+                  </button>
+                </form>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="mb-6 flex rounded-xl bg-warm-100 p-1">
             <button
               className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
@@ -127,7 +199,22 @@ export default function AuthPage() {
             >
               {loading ? '처리 중...' : isLogin ? '로그인' : '가입하기'}
             </button>
+
+            {isLogin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setForgot(true);
+                  clearError();
+                }}
+                className="w-full pt-1 text-sm text-warm-500 hover:text-primary-600"
+              >
+                비밀번호를 잊으셨나요?
+              </button>
+            )}
           </form>
+          </>
+          )}
         </div>
       </div>
     </div>

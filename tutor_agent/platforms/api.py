@@ -25,7 +25,9 @@ from ..auth import (
     authenticate_user,
     create_access_token,
     create_class,
+    create_reset_token,
     create_user,
+    reset_password,
     delete_class,
     delete_study_note,
     get_class,
@@ -184,6 +186,38 @@ async def login(body: LoginRequest):
 @app.get("/api/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return {"user": user}
+
+
+class RequestResetRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/auth/request-reset")
+async def request_password_reset(body: RequestResetRequest, background_tasks: BackgroundTasks):
+    """비밀번호 재설정 메일을 요청합니다. 계정 존재 여부는 노출하지 않습니다."""
+    token = create_reset_token(body.email)
+    if token:  # 계정이 있을 때만 실제 발송(응답은 항상 동일)
+        from ..mailer import send_reset_email
+
+        background_tasks.add_task(send_reset_email, body.email.lower(), token)
+    return {"message": "재설정 링크를 이메일로 보냈습니다. 메일함을 확인해 주세요."}
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@app.post("/api/auth/reset")
+async def do_password_reset(body: ResetPasswordRequest):
+    """재설정 토큰으로 비밀번호를 변경합니다."""
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="비밀번호는 6자 이상이어야 합니다.")
+    if not reset_password(body.token, body.password):
+        raise HTTPException(
+            status_code=400, detail="링크가 만료되었거나 유효하지 않습니다. 다시 요청해 주세요."
+        )
+    return {"message": "비밀번호가 변경되었습니다. 새 비밀번호로 로그인하세요."}
 
 
 # --- Classes Endpoints ---

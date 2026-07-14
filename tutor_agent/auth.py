@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -47,6 +48,17 @@ def _get_db() -> sqlite3.Connection:
             email TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
             hashed_password TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
@@ -273,6 +285,65 @@ def get_user(email: str) -> dict | None:
             "SELECT email, name FROM users WHERE email = ?", (email.lower(),)
         ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_reset_token(email: str, ttl_hours: int = 1) -> str | None:
+    """비밀번호 재설정 토큰을 생성·저장합니다. 계정이 없으면 None."""
+    email = email.lower()
+    conn = _get_db()
+    try:
+        if not conn.execute(
+            "SELECT 1 FROM users WHERE email = ?", (email,)
+        ).fetchone():
+            return None
+        token = secrets.token_urlsafe(32)
+        conn.execute(
+            "INSERT INTO password_reset_tokens (token, email, expires_at) "
+            "VALUES (?, ?, datetime('now', ?))",
+            (token, email, f"+{ttl_hours} hours"),
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def verify_reset_token(token: str) -> str | None:
+    """유효한(미사용·미만료) 재설정 토큰이면 이메일을 반환합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT email FROM password_reset_tokens "
+            "WHERE token = ? AND used = 0 AND expires_at > datetime('now')",
+            (token,),
+        ).fetchone()
+        return row["email"] if row else None
+    finally:
+        conn.close()
+
+
+def reset_password(token: str, new_password: str) -> bool:
+    """재설정 토큰을 검증해 비밀번호를 변경하고 토큰을 폐기합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT email FROM password_reset_tokens "
+            "WHERE token = ? AND used = 0 AND expires_at > datetime('now')",
+            (token,),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE users SET hashed_password = ? WHERE email = ?",
+            (_hash_password(new_password), row["email"]),
+        )
+        conn.execute(
+            "UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,)
+        )
+        conn.commit()
+        return True
     finally:
         conn.close()
 

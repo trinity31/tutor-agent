@@ -57,6 +57,22 @@ def send_email(to: str, subject: str, html: str, text: str = "") -> bool:
         return False
 
 
+def send_reset_email(to: str, token: str) -> bool:
+    """비밀번호 재설정 메일. 재설정 페이지 링크(토큰 포함)를 담는다."""
+    base = os.getenv("APP_BASE_URL", "https://ai-tutor.davinci-apps.online").rstrip("/")
+    link = f"{base}/reset?token={token}"
+    subject = "[AI Tutor] 비밀번호 재설정"
+    html = f"""\
+<div style="max-width:480px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#222;">
+  <h2 style="color:#12b886;margin:0 0 8px;">비밀번호 재설정</h2>
+  <p style="margin:0 0 16px;color:#556;">아래 버튼을 눌러 새 비밀번호를 설정하세요. 이 링크는 1시간 후 만료됩니다.</p>
+  <a href="{link}" style="display:inline-block;background:#12b886;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:12px;">비밀번호 재설정</a>
+  <p style="margin:20px 0 0;font-size:12px;color:#99a;">본인이 요청하지 않았다면 이 메일을 무시하세요.<br/>AI Tutor · 교재를 귀로</p>
+</div>"""
+    text = f"비밀번호 재설정 링크(1시간 후 만료): {link}\n\n본인이 요청하지 않았다면 무시하세요."
+    return send_email(to, subject, html, text)
+
+
 def send_review_email(to: str, quiz_titles: list[str]) -> bool:
     """복습 퀴즈 준비 알림 메일. 앱 '복습' 화면 링크를 담는다."""
     base = os.getenv("APP_BASE_URL", "https://ai-tutor.davinci-apps.online").rstrip("/")
