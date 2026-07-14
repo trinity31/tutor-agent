@@ -5,6 +5,7 @@ import {
   saveStudyNote,
   getStudyNotes,
   deleteStudyNote,
+  updateStudyNote,
   type StudyNote,
 } from '../../api/client';
 import { track } from '../../lib/analytics';
@@ -103,6 +104,8 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [noteText, setNoteText] = useState('');
   const [noteFlash, setNoteFlash] = useState('');
   const [notes, setNotes] = useState<StudyNote[]>([]);
+  const [editNoteId, setEditNoteId] = useState<string | null>(null);
+  const [editNoteText, setEditNoteText] = useState('');
 
   // 메모 패널을 열면 저장된 메모 목록 로드
   useEffect(() => {
@@ -352,6 +355,14 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const removeNote = (id: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== id));
     deleteStudyNote(id).catch(() => {});
+  };
+
+  const saveEditNote = (id: string) => {
+    const c = editNoteText.trim();
+    if (!c) return;
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, content: c } : n)));
+    setEditNoteId(null);
+    updateStudyNote(id, c).catch(() => {});
   };
   // 총 페이지 수 — 마지막 섹션 ID("p25-31")의 끝 페이지에서 계산
   const numPages =
@@ -614,17 +625,58 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
               <p className="py-4 text-center text-xs text-warm-400">저장된 메모가 없어요.</p>
             ) : (
               notes.map((n) => (
-                <div key={n.id} className="flex items-start gap-2 rounded-lg bg-warm-50 px-2.5 py-1.5">
-                  <p className="flex-1 whitespace-pre-wrap break-words text-xs text-warm-700">
-                    {n.content}
-                  </p>
-                  <button
-                    onClick={() => removeNote(n.id)}
-                    className="shrink-0 px-0.5 text-warm-300 hover:text-error-500"
-                    title="삭제"
-                  >
-                    ✕
-                  </button>
+                <div key={n.id} className="rounded-lg bg-warm-50 px-2.5 py-1.5">
+                  {editNoteId === n.id ? (
+                    <div className="space-y-1.5">
+                      <textarea
+                        autoFocus
+                        value={editNoteText}
+                        onChange={(e) => setEditNoteText(e.target.value)}
+                        rows={2}
+                        className="w-full resize-none rounded-md border border-warm-200 bg-white px-2 py-1.5 text-xs text-warm-900 focus:border-primary-500 focus:outline-none"
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setEditNoteId(null)}
+                          className="flex-1 rounded-md border border-warm-200 py-1 text-[11px] font-medium text-warm-600"
+                        >
+                          취소
+                        </button>
+                        <button
+                          onClick={() => saveEditNote(n.id)}
+                          disabled={!editNoteText.trim()}
+                          className="flex-1 rounded-md bg-primary-500 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 whitespace-pre-wrap break-words text-xs text-warm-700">
+                        {n.content}
+                      </p>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          onClick={() => {
+                            setEditNoteId(n.id);
+                            setEditNoteText(n.content);
+                          }}
+                          className="px-0.5 text-warm-400 hover:text-primary-600"
+                          title="수정"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => removeNote(n.id)}
+                          className="px-0.5 text-warm-300 hover:text-error-500"
+                          title="삭제"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}

@@ -3,10 +3,11 @@ import {
   saveStudyNote,
   getStudyNotes,
   deleteStudyNote,
+  updateStudyNote,
   type StudyNote,
 } from '../../api/client';
 
-/** 학습 메모 — 자료별 메모 작성·목록·삭제 (패널 '메모' 모드에서 사용) */
+/** 학습 메모 — 자료별 메모 작성·목록·수정·삭제 (패널 '메모' 모드에서 사용) */
 export default function StudyNotes({
   classId,
   materialName,
@@ -17,6 +18,8 @@ export default function StudyNotes({
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
 
   useEffect(() => {
     getStudyNotes(classId, materialName)
@@ -46,6 +49,19 @@ export default function StudyNotes({
     deleteStudyNote(id).catch(() => {});
   };
 
+  const startEdit = (n: StudyNote) => {
+    setEditingId(n.id);
+    setEditText(n.content);
+  };
+
+  const saveEdit = (id: string) => {
+    const c = editText.trim();
+    if (!c) return;
+    setNotes((p) => p.map((n) => (n.id === id ? { ...n, content: c } : n)));
+    setEditingId(null);
+    updateStudyNote(id, c).catch(() => {});
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-warm-100 p-4">
@@ -72,18 +88,54 @@ export default function StudyNotes({
         ) : (
           notes.map((n) => (
             <div key={n.id} className="rounded-xl bg-warm-50 p-3">
-              <div className="flex items-start gap-2">
-                <p className="flex-1 whitespace-pre-wrap break-words text-sm text-warm-800">
-                  {n.content}
-                </p>
-                <button
-                  onClick={() => remove(n.id)}
-                  className="shrink-0 px-1 text-warm-300 hover:text-error-500 transition-colors"
-                  title="삭제"
-                >
-                  ✕
-                </button>
-              </div>
+              {editingId === n.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    autoFocus
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-warm-200 bg-white px-3 py-2 text-sm text-warm-900 focus:border-primary-500 focus:outline-none"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="flex-1 rounded-lg border border-warm-200 py-1.5 text-xs font-medium text-warm-600"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={() => saveEdit(n.id)}
+                      disabled={!editText.trim()}
+                      className="flex-1 rounded-lg bg-primary-500 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <p className="flex-1 whitespace-pre-wrap break-words text-sm text-warm-800">
+                    {n.content}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      onClick={() => startEdit(n)}
+                      className="px-1 text-warm-400 hover:text-primary-600 transition-colors"
+                      title="수정"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={() => remove(n.id)}
+                      className="px-1 text-warm-300 hover:text-error-500 transition-colors"
+                      title="삭제"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}

@@ -905,6 +905,20 @@ def get_study_notes(
         conn.close()
 
 
+def update_study_note(note_id: str, user_email: str, content: str) -> bool:
+    """본인 소유의 학습 노트 내용을 수정합니다. 소유자가 아니면 변경하지 않습니다."""
+    conn = _get_db()
+    try:
+        cur = conn.execute(
+            "UPDATE study_notes SET content = ? WHERE id = ? AND user_email = ?",
+            (content, note_id, user_email.lower()),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
 def delete_study_note(note_id: str, user_email: str) -> bool:
     """본인 소유의 학습 노트를 삭제합니다. 소유자가 아니면 아무것도 지우지 않습니다."""
     conn = _get_db()

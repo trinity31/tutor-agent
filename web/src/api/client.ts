@@ -91,6 +91,10 @@ export async function getStudyNotes(classId: string, materialName?: string) {
   return apiGet<{ notes: StudyNote[] }>(`/notes${params}`);
 }
 
+export async function updateStudyNote(noteId: string, content: string) {
+  return apiPatch<{ status: string }>(`/notes/${noteId}`, { content });
+}
+
 export async function deleteStudyNote(noteId: string) {
   return apiDelete<{ status: string }>(`/notes/${noteId}`);
 }

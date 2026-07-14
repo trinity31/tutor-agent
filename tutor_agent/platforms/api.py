@@ -30,6 +30,7 @@ from ..auth import (
     reset_password,
     delete_class,
     delete_study_note,
+    update_study_note,
     get_class,
     get_classes,
     get_completed_materials,
@@ -854,6 +855,17 @@ async def save_note(body: SaveNoteRequest, user: dict = Depends(get_current_user
 @app.get("/api/notes")
 async def list_notes(class_id: str = "", material_name: str = "", user: dict = Depends(get_current_user)):
     return {"notes": get_study_notes(user["email"], class_id or None, material_name or None)}
+
+
+class UpdateNoteRequest(BaseModel):
+    content: str
+
+
+@app.patch("/api/notes/{note_id}")
+async def update_note(note_id: str, body: UpdateNoteRequest, user: dict = Depends(get_current_user)):
+    if not update_study_note(note_id, user["email"], body.content):
+        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
+    return {"status": "updated"}
 
 
 @app.delete("/api/notes/{note_id}")
