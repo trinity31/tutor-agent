@@ -15,6 +15,8 @@ const fmtRate = (r: number) => (Number.isInteger(r) ? r.toFixed(1) : String(r));
 interface Props {
   classId: string;
   materialName: string;
+  /** 원본 뷰 "이 페이지에서 질문" — 페이지 번호·질문을 상위(채팅)로 전달 */
+  onAskPage?: (page: number, question: string) => void;
 }
 
 function formatTime(sec: number): string {
@@ -23,7 +25,7 @@ function formatTime(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function AudioReader({ classId, materialName }: Props) {
+export default function AudioReader({ classId, materialName, onAskPage }: Props) {
   const {
     sections,
     voices,
@@ -397,6 +399,7 @@ export default function AudioReader({ classId, materialName }: Props) {
                   ? { page: playbackPage, box: manifest.chunks[currentChunk].bbox as number[] }
                   : undefined
               }
+              onAskPage={onAskPage}
             />
           </Suspense>
         </div>

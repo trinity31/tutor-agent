@@ -9,6 +9,8 @@ interface Props {
   onClose: () => void;
   /** 패널이 처음 열릴 때 보여줄 모드 (인덱스/듣기 카드에서 지정) */
   initialMode?: 'index' | 'audio';
+  /** 원본 뷰 "이 페이지에서 질문" — 페이지 번호·질문을 채팅으로 보낸다 */
+  onAskPage?: (page: number, question: string) => void;
 }
 
 export default function MaterialIndexPanel({
@@ -16,6 +18,7 @@ export default function MaterialIndexPanel({
   materialName,
   onClose,
   initialMode = 'index',
+  onAskPage,
 }: Props) {
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'not_ready' | 'error'>('loading');
@@ -103,7 +106,7 @@ export default function MaterialIndexPanel({
       {/* Content */}
       {mode === 'audio' ? (
         <div className="flex-1 overflow-hidden">
-          <AudioReader classId={classId} materialName={materialName} />
+          <AudioReader classId={classId} materialName={materialName} onAskPage={onAskPage} />
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto px-5 py-4">

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
-import { LAST_MATERIAL_KEY } from '../../stores/audioStore';
+import { LAST_MATERIAL_KEY, useAudioStore } from '../../stores/audioStore';
 import { markMaterialStarted } from '../../api/client';
 import MessageBubble from './MessageBubble';
 import AgentStatus from './AgentStatus';
@@ -179,6 +179,21 @@ export default function ChatArea() {
     sendMessage(text, selectedClassId || undefined, materialNames);
   };
 
+  // 원본 뷰 "이 페이지에서 질문" — 그 페이지 텍스트를 맥락으로 붙여 채팅으로 보낸다
+  const handleAskPage = (page: number, question: string) => {
+    const manifest = useAudioStore.getState().manifest;
+    const pageText = (manifest?.chunks ?? [])
+      .filter((c) => c.page === page)
+      .map((c) => c.text)
+      .join(' ')
+      .trim();
+    const composed = pageText
+      ? `다음은 교재 ${page}페이지 내용입니다:\n"""\n${pageText}\n"""\n\n이 페이지 내용에 대한 질문: ${question}`
+      : `교재 ${page}페이지에 대한 질문: ${question}`;
+    handleSend(composed);
+    if (isMobile) setIndexPanelOpen(false); // 모바일은 패널을 닫아 답변이 보이게
+  };
+
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -289,6 +304,7 @@ export default function ChatArea() {
               materialName={indexableMaterial}
               onClose={() => setIndexPanelOpen(false)}
               initialMode={panelMode}
+              onAskPage={handleAskPage}
             />
           </div>
         ) : (
@@ -304,6 +320,7 @@ export default function ChatArea() {
                 materialName={indexableMaterial}
                 onClose={() => setIndexPanelOpen(false)}
                 initialMode={panelMode}
+                onAskPage={handleAskPage}
               />
             </div>
           </div>
