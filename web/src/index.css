@@ -67,6 +67,9 @@ body {
 #root {
   min-height: 100dvh;
   display: flex;
+  /* 세로 방향 — 자식이 가로로 꽉 차게(stretch). row면 자식이 내용 너비로
+     줄어들어 왼쪽으로 쏠린다(랜딩 mx-auto 중앙정렬이 깨짐). */
+  flex-direction: column;
 }
 
 /* --- Scrollbar --- */
