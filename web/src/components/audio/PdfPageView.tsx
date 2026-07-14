@@ -12,8 +12,8 @@ interface Props {
   onListenFromPage?: (page: number) => void;
   /** 현재 낭독 중인 문단의 원본 영역 [x0,y0,x1,y1] 정규화(0~1) + 그 페이지 */
   highlight?: { page: number; box: number[] };
-  /** "이 페이지에서 질문" — 페이지 번호·질문을 채팅으로 보낸다 */
-  onAskPage?: (page: number, question: string) => void;
+  /** 현재 표시 중인 페이지를 상위로 보고 ("이 페이지에서 질문"용) */
+  onPageChange?: (page: number) => void;
 }
 
 export default function PdfPageView({
@@ -23,15 +23,13 @@ export default function PdfPageView({
   playbackPage,
   onListenFromPage,
   highlight,
-  onAskPage,
+  onPageChange,
 }: Props) {
   // 사용자가 직접 넘긴 페이지 — 재생 위치가 바뀌면 다시 재생 페이지를 따라간다
   const [manualPage, setManualPage] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [zoomed, setZoomed] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [question, setQuestion] = useState('');
 
   // 재생 위치가 움직이면 수동 탐색을 해제하고 재생 페이지로 복귀
   useEffect(() => {
@@ -40,19 +38,12 @@ export default function PdfPageView({
 
   const page = Math.max(1, Math.min(manualPage ?? playbackPage, numPages || 1));
 
-  const submitQuestion = () => {
-    const q = question.trim();
-    if (!q || !onAskPage) return;
-    onAskPage(page, q);
-    setQuestion('');
-    setAsking(false);
-  };
-
-  // 페이지가 바뀌면 로딩 상태 초기화
+  // 페이지가 바뀌면 로딩 상태 초기화 + 상위에 표시 페이지 보고
   useEffect(() => {
     setLoading(true);
     setFailed(false);
-  }, [page]);
+    onPageChange?.(page);
+  }, [page, onPageChange]);
 
   return (
     <div className="relative h-full overflow-hidden bg-warm-100/60">
@@ -103,45 +94,6 @@ export default function PdfPageView({
         >
           이 페이지부터 듣기
         </button>
-      )}
-
-      {/* "이 페이지에서 질문" — 우상단 플로팅 → 하단 입력바 */}
-      {onAskPage && !asking && (
-        <button
-          onClick={() => setAsking(true)}
-          className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-warm-900/85 px-3.5 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur active:scale-95"
-        >
-          💬 이 페이지에서 질문
-        </button>
-      )}
-      {onAskPage && asking && (
-        <div className="absolute inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-warm-200 bg-white p-2.5 shadow-[0_-8px_20px_-12px_rgba(0,0,0,0.25)]">
-          <input
-            autoFocus
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
-            placeholder={`${page}페이지에 대해 질문하기`}
-            className="min-w-0 flex-1 rounded-xl border border-warm-200 bg-warm-50 px-3.5 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
-          />
-          <button
-            onClick={submitQuestion}
-            disabled={!question.trim()}
-            className="shrink-0 rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-          >
-            질문
-          </button>
-          <button
-            onClick={() => {
-              setAsking(false);
-              setQuestion('');
-            }}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-warm-500 hover:bg-warm-100"
-            title="닫기"
-          >
-            ✕
-          </button>
-        </div>
       )}
 
       {/* 플로팅 페이지 네비 (하단 중앙) */}

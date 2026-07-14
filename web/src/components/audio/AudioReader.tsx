@@ -86,9 +86,10 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
-  // 텍스트 뷰 "이 페이지에서 질문" (재생 페이지 기준)
+  // "이 페이지에서 질문" — 텍스트 뷰는 재생 페이지, 원본 뷰는 표시 중인 페이지 기준
   const [askingText, setAskingText] = useState(false);
   const [askText, setAskText] = useState('');
+  const [pdfPage, setPdfPage] = useState(1);
   const [viewMode, setViewMode] = useState<'text' | 'pdf'>(
     () => (localStorage.getItem(VIEW_KEY) === 'pdf' ? 'pdf' : 'text'),
   );
@@ -288,10 +289,12 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const playbackPage =
     manifest?.chunks[Math.max(currentChunk, 0)]?.page ?? manifest?.chunks[0]?.page ?? 1;
 
+  // 질문 대상 페이지: 원본 뷰는 표시 중인 페이지, 텍스트 뷰는 재생 페이지
+  const askPage = viewMode === 'pdf' ? pdfPage : playbackPage;
   const submitTextQuestion = () => {
     const q = askText.trim();
     if (!q || !onAskPage) return;
-    onAskPage(playbackPage, q);
+    onAskPage(askPage, q);
     setAskText('');
     setAskingText(false);
   };
@@ -365,7 +368,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
     <div className="relative flex h-full flex-col bg-white">
       {/* 상단: 텍스트 / 원본 세그먼트 (설정은 하단 배속 칩 → 시트로 이동) */}
       <div className="relative flex items-center justify-center border-b border-warm-100 bg-white px-4 py-2">
-        {viewMode === 'text' && onAskPage && !askingText && (
+        {onAskPage && !askingText && (
           <button
             onClick={() => setAskingText(true)}
             className="absolute right-3 flex items-center gap-1 rounded-full bg-warm-900/85 px-3 py-1.5 text-xs font-semibold text-white active:scale-95"
@@ -419,7 +422,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
                   ? { page: playbackPage, box: manifest.chunks[currentChunk].bbox as number[] }
                   : undefined
               }
-              onAskPage={onAskPage}
+              onPageChange={setPdfPage}
             />
           </Suspense>
         </div>
@@ -487,7 +490,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
             value={askText}
             onChange={(e) => setAskText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submitTextQuestion()}
-            placeholder={`${playbackPage}페이지에 대해 질문하기`}
+            placeholder={`${askPage}페이지에 대해 질문하기`}
             className="min-w-0 flex-1 rounded-xl border border-warm-200 bg-warm-50 px-3.5 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-primary-500 focus:outline-none"
           />
           <button
