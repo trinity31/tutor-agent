@@ -421,8 +421,8 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
 
   return (
     <div className="relative flex h-full flex-col bg-white">
-      {/* 상단: 텍스트 / 원본 세그먼트 (설정은 하단 배속 칩 → 시트로 이동) */}
-      <div className="relative flex items-center justify-center border-b border-warm-100 bg-white px-4 py-2">
+      {/* 상단: 텍스트 / 원본 세그먼트(좌측) + 질문·메모(우측). 설정은 하단 배속 칩 → 시트 */}
+      <div className="relative flex items-center justify-start border-b border-warm-100 bg-white px-3 py-2">
         {!askingText && !askingNote && (
           <div className="absolute right-3 flex items-center gap-1.5">
             {onAskPage && (
