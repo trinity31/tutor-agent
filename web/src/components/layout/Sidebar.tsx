@@ -193,9 +193,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             </h3>
             <button
               onClick={() => setShowCreateForm(!showCreateForm)}
-              className="rounded-md px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+              className="flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-bold text-primary-700 active:scale-95 transition-transform"
             >
-              + 추가
+              <span className="text-sm leading-none">＋</span> 클래스 추가
             </button>
           </div>
 
