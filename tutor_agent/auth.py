@@ -187,6 +187,21 @@ def _get_db() -> sqlite3.Connection:
         )
         """
     )
+    # 이어듣기 위치(기기 간 동기화용) — 자료별 마지막 차시·음성·재생 위치
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS listen_progress (
+            user_email TEXT NOT NULL,
+            class_id TEXT NOT NULL,
+            material_name TEXT NOT NULL,
+            section TEXT NOT NULL DEFAULT '',
+            voice TEXT NOT NULL DEFAULT '',
+            position REAL NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (user_email, class_id, material_name)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -614,6 +629,60 @@ def mark_material_started(user_email: str, class_id: str, material_name: str) ->
             (user_email.lower(), class_id, material_name),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def save_listen_progress(
+    user_email: str,
+    class_id: str,
+    material_name: str,
+    section: str,
+    voice: str,
+    position: float,
+) -> None:
+    """이어듣기 위치를 저장/갱신합니다(자료당 1행, 기기 간 동기화용)."""
+    conn = _get_db()
+    try:
+        conn.execute(
+            """INSERT INTO listen_progress
+               (user_email, class_id, material_name, section, voice, position)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_email, class_id, material_name) DO UPDATE SET
+                 section=excluded.section, voice=excluded.voice,
+                 position=excluded.position, updated_at=datetime('now')""",
+            (user_email.lower(), class_id, material_name, section, voice, position),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_listen_progress(user_email: str, class_id: str, material_name: str) -> dict | None:
+    """특정 자료의 이어듣기 위치를 반환합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT section, voice, position FROM listen_progress "
+            "WHERE user_email=? AND class_id=? AND material_name=?",
+            (user_email.lower(), class_id, material_name),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_last_listen_progress(user_email: str) -> dict | None:
+    """가장 최근 이어듣기 위치(마지막으로 듣던 자료)를 반환합니다."""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT class_id, material_name, section, voice, position "
+            "FROM listen_progress WHERE user_email=? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (user_email.lower(),),
+        ).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 

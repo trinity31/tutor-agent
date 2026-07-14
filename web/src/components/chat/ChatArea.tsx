@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
 import { LAST_MATERIAL_KEY, useAudioStore } from '../../stores/audioStore';
-import { markMaterialStarted } from '../../api/client';
+import { markMaterialStarted, getLastListenProgress } from '../../api/client';
 import MessageBubble from './MessageBubble';
 import AgentStatus from './AgentStatus';
 import ChatInput from './ChatInput';
@@ -82,7 +82,8 @@ export default function ChatArea() {
   const pendingResumeRef = useRef<string | null>(null);
   const [resuming, setResuming] = useState(false);
 
-  // 1) 최초 1회, 아직 아무것도 선택 안 했을 때 저장된 자료의 클래스를 선택
+  // 1) 최초 1회, 마지막으로 듣던 자료의 클래스를 선택 (서버 우선 — 기기 간
+  //    이어듣기. 실패 시 localStorage 폴백). 차시·재생 위치는 audioStore.init이 복원.
   useEffect(() => {
     if (resumedRef.current) return;
     if (selectedClassId) {
@@ -91,18 +92,39 @@ export default function ChatArea() {
     }
     if (classes.length === 0) return; // 클래스 로드 대기
     resumedRef.current = true;
-    try {
-      const raw = localStorage.getItem(LAST_MATERIAL_KEY);
-      if (!raw) return;
-      const { classId, materialName } = JSON.parse(raw);
+
+    const restore = (classId?: string, materialName?: string) => {
       if (classId && materialName && classes.some((c) => c.id === classId)) {
         pendingResumeRef.current = materialName;
         setResuming(true);
         selectClass(classId); // 자료 목록 로드
       }
-    } catch {
-      /* ignore */
-    }
+    };
+    const fromLocal = () => {
+      try {
+        const raw = localStorage.getItem(LAST_MATERIAL_KEY);
+        if (raw) {
+          const o = JSON.parse(raw);
+          restore(o.classId, o.materialName);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    getLastListenProgress()
+      .then((p) => {
+        if (p?.class_id && p?.material_name) {
+          localStorage.setItem(
+            LAST_MATERIAL_KEY,
+            JSON.stringify({ classId: p.class_id, materialName: p.material_name }),
+          );
+          restore(p.class_id, p.material_name);
+        } else {
+          fromLocal();
+        }
+      })
+      .catch(fromLocal);
   }, [classes, selectedClassId, selectClass]);
 
   // 2) 자료 목록이 로드되면 마지막 자료 선택

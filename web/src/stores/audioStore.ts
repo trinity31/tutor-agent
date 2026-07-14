@@ -4,6 +4,7 @@ import {
   getAudioManifest,
   getAudioSections,
   getAudioStatus,
+  getMaterialProgress,
   requestAudio,
   type AudioManifest,
   type AudioSection,
@@ -92,7 +93,27 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     });
     try {
       const res = await getAudioSections(classId, materialName);
-      const voice = get().voice in res.voices ? get().voice : res.default_voice;
+      let voice = get().voice in res.voices ? get().voice : res.default_voice;
+      // 서버 이어듣기 위치(기기 간)를 localStorage에 심어, 아래 복원이 서버 값으로
+      // 이어지게 한다. 서버 실패 시 기존 localStorage 값 사용.
+      try {
+        const sp = await getMaterialProgress(classId, materialName);
+        if (sp?.section && res.sections.some((s) => s.section === sp.section)) {
+          localStorage.setItem(sectionKey(classId, materialName), sp.section);
+          if (sp.voice && sp.voice in res.voices) {
+            voice = sp.voice;
+            localStorage.setItem(VOICE_KEY, sp.voice);
+          }
+          if (typeof sp.position === 'number' && sp.position > 0) {
+            localStorage.setItem(
+              audioPositionKey(classId, materialName, sp.section, voice),
+              String(sp.position),
+            );
+          }
+        }
+      } catch {
+        /* 서버 미설정·실패 시 localStorage 값 사용 */
+      }
       // 마지막으로 듣던 차시로 복귀 (없거나 사라졌으면 첫 차시)
       const savedSection = localStorage.getItem(sectionKey(classId, materialName));
       const section = res.sections.some((s) => s.section === savedSection)

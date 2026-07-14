@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioStore, audioPositionKey } from '../../stores/audioStore';
+import { saveListenProgress } from '../../api/client';
 import { track } from '../../lib/analytics';
 
 // pdf.js 번들이 커서 PDF 뷰를 열 때만 로드
@@ -50,6 +51,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const chunkRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const lastSaveRef = useRef(0); // 서버 위치 저장 스로틀
   // 섹션 자동 이어듣기: 다음 섹션 오디오가 로드되면 바로 재생
   const autoAdvanceRef = useRef(false);
   // 다른 섹션의 특정 페이지로 "이 페이지부터 듣기": 섹션 전환 후 로드되면 그 페이지로 시크
@@ -208,6 +210,17 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
     const t = audio.currentTime;
     setCurrentTime(t);
     if (posKey) localStorage.setItem(posKey, String(t));
+    // 서버에도 위치 저장(기기 간 이어듣기) — 5초 스로틀
+    if (section && performance.now() - lastSaveRef.current > 5000) {
+      lastSaveRef.current = performance.now();
+      saveListenProgress({
+        class_id: classId,
+        material_name: materialName,
+        section,
+        voice,
+        position: t,
+      });
+    }
     const idx = manifest.chunks.findIndex((c) => t >= c.start && t < c.end);
     if (idx >= 0) setCurrentChunk(idx);
     updatePositionState();
@@ -549,6 +562,17 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
               setPlaying(false);
               if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
               flushListen();
+              // 일시정지 즉시 서버에 위치 저장(기기 간 이어듣기)
+              if (section && audioRef.current) {
+                lastSaveRef.current = performance.now();
+                saveListenProgress({
+                  class_id: classId,
+                  material_name: materialName,
+                  section,
+                  voice,
+                  position: audioRef.current.currentTime,
+                });
+              }
             }}
             onEnded={handleEnded}
           />

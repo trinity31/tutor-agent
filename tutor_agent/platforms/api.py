@@ -35,6 +35,9 @@ from ..auth import (
     get_completed_materials,
     get_material_activity,
     mark_material_started,
+    save_listen_progress,
+    get_listen_progress,
+    get_last_listen_progress,
     get_quiz_result,
     get_quiz_results,
     get_study_notes,
@@ -798,6 +801,40 @@ class MarkActivityRequest(BaseModel):
 async def mark_activity(body: MarkActivityRequest, user: dict = Depends(get_current_user)):
     """자료 학습 시작(과외·Q&A·퀴즈·인덱스·듣기)을 기록해 '학습중'으로 만듭니다."""
     mark_material_started(user["email"], body.class_id, body.material_name)
+
+
+# --- 이어듣기 위치 (기기 간 동기화) ---
+
+
+class ListenProgressRequest(BaseModel):
+    class_id: str
+    material_name: str
+    section: str = ""
+    voice: str = ""
+    position: float = 0
+
+
+@app.post("/api/listen-progress", status_code=204)
+async def save_progress(body: ListenProgressRequest, user: dict = Depends(get_current_user)):
+    """이어듣기 위치를 저장합니다(자료별 마지막 차시·음성·재생 위치)."""
+    save_listen_progress(
+        user["email"], body.class_id, body.material_name,
+        body.section, body.voice, body.position,
+    )
+
+
+@app.get("/api/listen-progress/last")
+async def last_progress(user: dict = Depends(get_current_user)):
+    """가장 최근 이어듣던 자료·위치를 반환합니다(없으면 빈 객체)."""
+    return get_last_listen_progress(user["email"]) or {}
+
+
+@app.get("/api/listen-progress")
+async def material_progress(
+    class_id: str, material_name: str, user: dict = Depends(get_current_user)
+):
+    """특정 자료의 이어듣기 위치를 반환합니다(없으면 빈 객체)."""
+    return get_listen_progress(user["email"], class_id, material_name) or {}
 
 
 # --- Study Notes Endpoints ---

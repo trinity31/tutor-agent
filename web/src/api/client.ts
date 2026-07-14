@@ -156,6 +156,35 @@ export async function getCompletedMaterials(classId: string) {
   return apiGet<{ materials: string[] }>(`/classes/${classId}/completed-materials`);
 }
 
+// --- 이어듣기 위치 (기기 간 동기화) ---
+export interface ListenProgress {
+  class_id?: string;
+  material_name?: string;
+  section?: string;
+  voice?: string;
+  position?: number;
+}
+
+export function saveListenProgress(data: {
+  class_id: string;
+  material_name: string;
+  section: string;
+  voice: string;
+  position: number;
+}) {
+  return apiPost('/listen-progress', data).catch(() => {});
+}
+
+export function getLastListenProgress() {
+  return apiGet<ListenProgress>('/listen-progress/last');
+}
+
+export function getMaterialProgress(classId: string, materialName: string) {
+  return apiGet<ListenProgress>(
+    `/listen-progress?class_id=${encodeURIComponent(classId)}&material_name=${encodeURIComponent(materialName)}`,
+  );
+}
+
 export function requestPasswordReset(email: string) {
   return apiPost<{ message: string }>('/auth/request-reset', { email });
 }
