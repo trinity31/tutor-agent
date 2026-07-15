@@ -224,7 +224,6 @@ export default function OnboardingCards({
           <input
             ref={fileRef}
             type="file"
-            accept="application/pdf,.pdf"
             multiple
             className="hidden"
             onChange={handleUploadOnboarding}

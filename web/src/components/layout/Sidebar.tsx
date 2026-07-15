@@ -330,7 +330,6 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                           <input
                             ref={fileRef}
                             type="file"
-                            accept="application/pdf,.pdf"
                             multiple
                             className="hidden"
                             onChange={(e) => handleUpload(cls.id, e)}
