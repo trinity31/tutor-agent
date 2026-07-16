@@ -2,7 +2,7 @@
 
 from langchain.agents import create_agent
 
-from . import DEFAULT_MODEL
+from . import QUIZ_MODEL
 from .prompts import TRANSFER_SUFFIX
 from .tools.tutor_tools import get_material_index, get_study_memos, search_material
 
@@ -87,7 +87,7 @@ QUIZ_AGENT_PROMPT = """당신은 대학 수준의 학습 평가 전문가입니�
 """ + TRANSFER_SUFFIX
 
 quiz_agent = create_agent(
-    model=DEFAULT_MODEL,
+    model=QUIZ_MODEL,
     tools=QUIZ_AGENT_TOOLS,
     system_prompt=QUIZ_AGENT_PROMPT,
 )
