@@ -95,6 +95,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [dragPage, setDragPage] = useState<number | null>(null); // 하단 페이지 바 드래그 중 값
   const [sheetOpen, setSheetOpen] = useState(false);
   // "이 페이지에서 질문" — 텍스트 뷰는 재생 페이지, 원본 뷰는 표시 중인 페이지 기준
   const [askingText, setAskingText] = useState(false);
@@ -747,17 +748,42 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
             }}
             onEnded={handleEnded}
           />
-          <input
-            type="range"
-            min={0}
-            max={duration || manifest?.duration || 0}
-            step={0.1}
-            value={currentTime}
-            onChange={(e) => seekTo(Number(e.target.value))}
-            className="mb-2.5 h-1.5 w-full accent-primary-500"
-          />
+          {hasPages ? (
+            /* 문서 전체 페이지 바 — 드래그로 페이지 이동, 놓으면 그 페이지 낭독으로 시크 */
+            <input
+              type="range"
+              min={1}
+              max={numPages}
+              step={1}
+              value={dragPage ?? playbackPage}
+              onChange={(e) => setDragPage(Number(e.target.value))}
+              onMouseUp={() => {
+                if (dragPage != null) listenFromPage(dragPage);
+                setDragPage(null);
+              }}
+              onTouchEnd={() => {
+                if (dragPage != null) listenFromPage(dragPage);
+                setDragPage(null);
+              }}
+              className="mb-2.5 h-1.5 w-full accent-primary-500"
+              aria-label="페이지 이동"
+            />
+          ) : (
+            /* 구버전 매니페스트(페이지 정보 없음) — 오디오 시간 바 */
+            <input
+              type="range"
+              min={0}
+              max={duration || manifest?.duration || 0}
+              step={0.1}
+              value={currentTime}
+              onChange={(e) => seekTo(Number(e.target.value))}
+              className="mb-2.5 h-1.5 w-full accent-primary-500"
+            />
+          )}
           <div className="flex items-center gap-2.5">
-            <span className="w-9 text-xs tabular-nums text-warm-400">{formatTime(currentTime)}</span>
+            <span className="w-12 text-xs tabular-nums text-warm-400">
+              {hasPages ? `${dragPage ?? playbackPage}/${numPages}` : formatTime(currentTime)}
+            </span>
             <button
               onClick={() => skipBy(-15)}
               className="flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-warm-200 text-[10px] font-bold leading-none text-warm-600 hover:bg-warm-50 transition-colors"
