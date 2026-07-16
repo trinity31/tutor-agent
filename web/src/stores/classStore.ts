@@ -26,7 +26,7 @@ interface ClassState {
   viewMaterial: (name: string | null) => void;
   clearSelection: () => void;
   loadMaterials: (classId: string) => Promise<void>;
-  uploadMaterial: (classId: string, file: File) => Promise<void>;
+  uploadMaterial: (classId: string, file: File) => Promise<string>;
   pollIndexingStatus: (classId: string) => void;
 }
 
@@ -112,6 +112,7 @@ export const useClassStore = create<ClassState>((set, get) => ({
       set((s) => ({ indexingMaterials: new Set([...s.indexingMaterials, res.name]) }));
       get().pollIndexingStatus(classId);
     }
+    return res.name;
   },
 
   pollIndexingStatus: (classId: string) => {

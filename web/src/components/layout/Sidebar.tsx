@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { markComplete, getMaterialStatus } from '../../api/client';
-import { track } from '../../lib/analytics';
+import { getMaterialStatus } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useClassStore } from '../../stores/classStore';
@@ -10,7 +9,6 @@ import { useReviewStore } from '../../stores/reviewStore';
 
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const statusVersion = useUIStore((s) => s.statusVersion);
-  const bumpStatus = useUIStore((s) => s.bumpStatus);
   const navigate = useNavigate();
   const reviewCount = useReviewStore((s) => s.pending.length);
   const { user, logout } = useAuthStore();
@@ -87,9 +85,10 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     setUploading(true);
     setUploadMsg('');
     let uploaded = 0;
+    let lastName = '';
     for (const file of Array.from(files)) {
       try {
-        await uploadMaterial(classId, file);
+        lastName = await uploadMaterial(classId, file);
         uploaded++;
       } catch (err) {
         setUploadMsg((err as Error).message);
@@ -98,18 +97,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
     if (uploaded > 0) setUploadMsg(`${uploaded}개 파일 업로드 완료!`);
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
-  };
-
-  const handleMarkComplete = (classId: string, name: string) => {
-    // 낙관적 업데이트 — 누르는 즉시 '완료' 배지, API는 백그라운드
-    setCompletedMaterials((prev) => [...prev, name]);
-    bumpStatus(); // 홈의 학습완료 버튼 상태도 동기화
-    track('study_complete', { class_id: classId, material_name: name, source: 'sidebar' });
-    markComplete({ class_id: classId, material_name: name }).catch(() => {
-      // 실패 시 되돌림
-      setCompletedMaterials((prev) => prev.filter((n) => n !== name));
-      bumpStatus();
-    });
+    // 업로드한 자료를 자동 선택하고 홈으로 (여러 개면 마지막 것)
+    if (lastName) {
+      toggleMaterial(lastName);
+      onClose();
+    }
   };
 
   // 이름 미설정(백엔드가 name을 email로 저장) 시 이메일 아이디를 이름으로
@@ -302,7 +294,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                   )}
                                 </button>
 
-                                {/* 상태 배지 — 미완료는 탭하면 학습 완료 처리 */}
+                                {/* 상태 배지 — 표시 전용(완료 처리는 홈의 '학습완료' 버튼에서) */}
                                 {isIndexing ? (
                                   <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-500 animate-pulse">
                                     준비중
@@ -312,17 +304,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                     완료
                                   </span>
                                 ) : (
-                                  <button
-                                    onClick={() => handleMarkComplete(cls.id, name)}
-                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                                  <span
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
                                       inProgressMaterials.includes(name)
                                         ? 'bg-accent-50 text-accent-500'
                                         : 'bg-warm-100 text-warm-400'
                                     }`}
-                                    title="탭하여 학습 완료로 표시"
                                   >
                                     {inProgressMaterials.includes(name) ? '학습중' : '미시작'}
-                                  </button>
+                                  </span>
                                 )}
 
                               </div>
