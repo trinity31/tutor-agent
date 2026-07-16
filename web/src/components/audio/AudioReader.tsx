@@ -96,6 +96,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [dragPage, setDragPage] = useState<number | null>(null); // 하단 페이지 바 드래그 중 값
+  const [pendingPage, setPendingPage] = useState<number | null>(null); // 차시 전환 로딩 중 표시할 목표 페이지
   const [sheetOpen, setSheetOpen] = useState(false);
   // "이 페이지에서 질문" — 텍스트 뷰는 재생 페이지, 원본 뷰는 표시 중인 페이지 기준
   const [askingText, setAskingText] = useState(false);
@@ -202,6 +203,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
     if (pendingSeekPageRef.current != null) {
       const page = pendingSeekPageRef.current;
       pendingSeekPageRef.current = null;
+      setPendingPage(null);
       const target =
         manifest?.chunks.find((c) => c.page === page) ??
         manifest?.chunks.find((c) => (c.page ?? 0) >= page) ??
@@ -211,6 +213,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
       updatePositionState();
       return;
     }
+    setPendingPage(null);
     const saved = posKey ? Number(localStorage.getItem(posKey)) : 0;
     if (saved > 0 && saved < audio.duration - 1) {
       audio.currentTime = saved;
@@ -322,7 +325,6 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
   const generating = status === 'loading' || status === 'pending' || status === 'generating';
 
   // PDF 뷰: 재생 위치의 페이지 (구버전 매니페스트는 페이지 정보 없음)
-  const hasPages = manifest?.chunks.some((c) => c.page != null) ?? false;
   const playbackPage =
     manifest?.chunks[Math.max(currentChunk, 0)]?.page ?? manifest?.chunks[0]?.page ?? 1;
 
@@ -372,6 +374,8 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
       const m = s.section.match(/-(\d+)$/);
       return m ? Math.max(max, Number(m[1])) : max;
     }, 0) || 1;
+  // 페이지 정보가 있는 자료인지 — 섹션 ID 기준이라 차시 전환 로딩 중에도 안 흔들린다
+  const paged = sections.some((s) => /\d+\s*-\s*\d+/.test(s.section));
 
   // 섹션 ID("p9-16")에서 페이지 범위 추출
   const sectionPageRange = (id: string): [number, number] => {
@@ -394,6 +398,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
     });
     if (targetSection && targetSection.section !== section) {
       pendingSeekPageRef.current = page;
+      setPendingPage(page); // 로딩 중에도 목표 페이지를 계속 표시
       selectSection(targetSection.section);
       return;
     }
@@ -485,8 +490,9 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
       )}
 
       {/* 본문: PDF 원본 (페이지 자동 넘김) 또는 낭독 텍스트 (청크 하이라이트) */}
-      {status === 'ready' && viewMode === 'pdf' ? (
-        <div className="flex-1 overflow-hidden">
+      {/* 원본 뷰는 차시 전환 오디오 로딩 중에도 PDF를 계속 보여준다(오디오만 조용히 로드) */}
+      {viewMode === 'pdf' && paged && status !== 'failed' && status !== 'error' ? (
+        <div className="relative flex-1 overflow-hidden">
           <Suspense
             fallback={<p className="p-4 text-sm text-warm-400">PDF 뷰어를 불러오는 중...</p>}
           >
@@ -494,8 +500,8 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
               classId={classId}
               materialName={materialName}
               numPages={numPages}
-              playbackPage={playbackPage}
-              onListenFromPage={hasPages ? listenFromPage : undefined}
+              playbackPage={pendingPage ?? playbackPage}
+              onListenFromPage={paged ? listenFromPage : undefined}
               highlight={
                 currentChunk >= 0 && manifest?.chunks[currentChunk]?.bbox
                   ? { page: playbackPage, box: manifest.chunks[currentChunk].bbox as number[] }
@@ -504,6 +510,14 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
               onPageChange={setPdfPage}
             />
           </Suspense>
+          {/* 오디오 로딩/생성은 페이지를 가리지 않고 상단에 조용히 표시 */}
+          {generating && (
+            <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-warm-900/80 px-3 py-1 text-xs text-white shadow">
+              {status === 'generating' || status === 'pending'
+                ? '오디오 생성 중…'
+                : '오디오 불러오는 중…'}
+            </div>
+          )}
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -748,14 +762,14 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
             }}
             onEnded={handleEnded}
           />
-          {hasPages ? (
+          {paged ? (
             /* 문서 전체 페이지 바 — 드래그로 페이지 이동, 놓으면 그 페이지 낭독으로 시크 */
             <input
               type="range"
               min={1}
               max={numPages}
               step={1}
-              value={dragPage ?? playbackPage}
+              value={dragPage ?? pendingPage ?? playbackPage}
               onChange={(e) => setDragPage(Number(e.target.value))}
               onMouseUp={() => {
                 if (dragPage != null) listenFromPage(dragPage);
@@ -782,7 +796,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
           )}
           <div className="flex items-center gap-2.5">
             <span className="w-12 text-xs tabular-nums text-warm-400">
-              {hasPages ? `${dragPage ?? playbackPage}/${numPages}` : formatTime(currentTime)}
+              {paged ? `${dragPage ?? pendingPage ?? playbackPage}/${numPages}` : formatTime(currentTime)}
             </span>
             <button
               onClick={() => skipBy(-15)}
