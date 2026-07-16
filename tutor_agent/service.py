@@ -222,38 +222,51 @@ _MATERIALS_DIR = Path(__file__).parent.parent / "data" / "materials"
 
 
 def upload_material(user_id: str, file_path: str, display_name: str, class_id: str) -> dict:
-    """PDF를 클래스에 업로드합니다. 인덱싱은 시작만 하고 즉시 반환합니다."""
+    """PDF를 클래스에 업로드합니다. 무거운 Gemini 업로드·인덱싱은 백그라운드로 넘기고
+    로컬 저장만 마친 뒤 즉시 반환한다. (대용량 PDF의 Gemini 재업로드가 HTTP 요청을
+    붙잡아 엣지 타임아웃으로 실패하던 문제 해결.)"""
     store_name = _store_name_for(user_id, class_id)
     existing = load_manifest(user_id, class_id)
 
     if display_name in existing:
         return {"status": "duplicate", "name": display_name}
 
-    op = upload_pdf_start(store_name, file_path, display_name)
     save_manifest(existing + [display_name], user_id, class_id)
 
-    # PDF를 로컬에 보관 (뷰어용)
+    # PDF를 로컬에 보관 (뷰어용 + 백그라운드 Gemini 업로드 원본)
     local_dir = _MATERIALS_DIR / user_id / class_id
     local_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(file_path, local_dir / f"{display_name}.pdf")
+    local_pdf = local_dir / f"{display_name}.pdf"
+    shutil.copy2(file_path, local_pdf)
 
-    return {"status": "indexing", "name": display_name, "_op": op, "_store_name": store_name}
+    # 준비중 상태 즉시 노출 (실제 Gemini 업로드는 finish_indexing에서)
+    set_indexing_status(store_name, display_name, "indexing")
+
+    return {
+        "status": "indexing",
+        "name": display_name,
+        "_store_name": store_name,
+        "_pdf_path": str(local_pdf),
+    }
 
 
 logger = logging.getLogger(__name__)
 
 
-def finish_indexing(op, store_name: str, display_name: str, user_id: str = "", class_id: str = ""):
-    """백그라운드에서 인덱싱 완료를 대기하고 마크다운 인덱스를 생성합니다."""
+def finish_indexing(
+    store_name: str, pdf_path: str, display_name: str, user_id: str = "", class_id: str = ""
+):
+    """백그라운드에서 Gemini 업로드 → 인덱싱 완료 대기 → 마크다운 인덱스 생성까지 수행한다.
+    대용량 PDF의 Gemini 업로드가 오래 걸려도 HTTP 요청을 붙잡지 않는다."""
     try:
+        op = upload_pdf_start(store_name, pdf_path, display_name)
         wait_for_indexing(op)
         logger.info(f"인덱싱 완료: {display_name}")
 
         if user_id and class_id:
-            pdf_path = _MATERIALS_DIR / user_id / class_id / f"{display_name}.pdf"
-            if pdf_path.exists() and not load_material_index(user_id, class_id, display_name):
+            if os.path.exists(pdf_path) and not load_material_index(user_id, class_id, display_name):
                 try:
-                    md = generate_material_index(str(pdf_path), display_name)
+                    md = generate_material_index(pdf_path, display_name)
                     if md:
                         save_material_index(user_id, class_id, display_name, md)
                 except Exception:

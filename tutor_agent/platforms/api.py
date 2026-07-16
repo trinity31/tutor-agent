@@ -307,11 +307,12 @@ async def upload(
 
     add_usage(user["email"], "uploads_monthly")
 
-    # 인덱싱 + 마크다운 인덱스 생성을 백그라운드에서 완료
+    # Gemini 업로드 + 인덱싱 + 마크다운 인덱스 생성을 모두 백그라운드에서 수행
+    # (대용량 PDF의 Gemini 업로드가 요청을 붙잡아 타임아웃 나던 문제 해결)
     background_tasks.add_task(
         finish_indexing,
-        result.pop("_op"),
         result.pop("_store_name"),
+        result.pop("_pdf_path"),
         display_name,
         user["email"],
         class_id,
