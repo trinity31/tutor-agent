@@ -288,9 +288,18 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                                         ? 'bg-primary-50 font-bold text-warm-900'
                                         : 'text-warm-600 hover:bg-warm-50'
                                   }`}
-                                  title={isIndexing ? '준비 중...' : name}
+                                  title={isIndexing ? '준비 중...' : `${name} — 탭하여 열기`}
                                 >
-                                  <span className="truncate">{name}</span>
+                                  <span className="min-w-0 flex-1 truncate">{name}</span>
+                                  {/* 탭하면 열린다는 걸 드러내는 셰브론 (준비 완료 후) */}
+                                  {!isIndexing && (
+                                    <span
+                                      className={`ml-1 shrink-0 ${isChecked ? 'text-primary-500' : 'text-warm-300'}`}
+                                      aria-hidden
+                                    >
+                                      ›
+                                    </span>
+                                  )}
                                 </button>
 
                                 {/* 상태 배지 — 미완료는 탭하면 학습 완료 처리 */}
