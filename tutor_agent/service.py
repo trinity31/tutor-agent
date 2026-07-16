@@ -814,7 +814,11 @@ def generate_audio_asset(
         )
         _attach_chunk_bboxes(chunks, page_bodies)
         if not chunks:
-            return _fail("낭독할 문장을 찾지 못했습니다 (이미지 스캔 PDF일 수 있습니다).")
+            return _fail(
+                "이 자료는 스캔 이미지 PDF여서 낭독을 만들 수 없습니다. "
+                "글자가 텍스트로 들어 있는 PDF를 올리면 낭독이 됩니다. "
+                "(이 자료도 Q&A·퀴즈는 사용해 보실 수 있어요.)"
+            )
 
         # TTS로 보내는 실제 문자 수를 사용량으로 기록 (월 한도 검사의 근거)
         from .usage import add_usage
