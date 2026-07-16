@@ -55,6 +55,8 @@ interface AudioState {
   /** 오디오 캐시버스트용 — 재생성 시 증가시켜 <audio> src를 새로 받게 한다 */
   fileVersion: number;
   prefetchNext: () => void;
+  /** 자료 열면 모든 차시를 백그라운드에서 순차 생성 (한번에 준비) */
+  generateAllSections: () => Promise<void>;
   advanceToNext: () => boolean;
   reset: () => void;
 }
@@ -126,6 +128,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         voice,
       });
       await get().requestGeneration();
+      // 나머지 차시도 백그라운드에서 순차 생성 (한번에 준비)
+      get().generateAllSections();
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : '오디오 정보를 불러오지 못했습니다.' });
     }
@@ -262,6 +266,29 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     if (!next) return;
     // 서버가 캐시·중복 생성을 알아서 처리하므로 fire-and-forget
     requestAudio(classId, materialName, next.section, voice).catch(() => {});
+  },
+
+  generateAllSections: async () => {
+    // 자료를 열면 모든 차시를 순차로 생성해 둔다(한번에 하나씩 — 서버 과부하 방지).
+    // 이미 생성된 차시는 서버가 즉시 ready를 반환하므로 건너뛴다.
+    const { classId, materialName, sections, voice } = get();
+    if (!classId || !materialName || sections.length <= 1) return;
+    const gen = pollGeneration; // 자료·차시·음성이 바뀌면 중단
+    for (const s of sections) {
+      if (gen !== pollGeneration) return;
+      try {
+        const res = await requestAudio(classId, materialName, s.section, voice, false);
+        if (res.status === 'ready') continue;
+        for (let i = 0; i < 200; i++) {
+          if (gen !== pollGeneration) return;
+          const st = await getAudioStatus(classId, materialName, s.section, voice);
+          if (st.status === 'ready' || st.status === 'failed') break;
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        }
+      } catch {
+        /* 한 차시 실패해도 다음 진행 */
+      }
+    }
   },
 
   advanceToNext: () => {
