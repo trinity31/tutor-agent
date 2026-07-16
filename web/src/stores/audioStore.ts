@@ -42,6 +42,8 @@ interface AudioState {
   currentChunk: number;
   rate: number;
   error: string;
+  /** 실패가 재시도 가능한지 (스캔 PDF 등 근본 불가면 false → '다시 시도' 숨김) */
+  retryable: boolean;
   init: (classId: string, materialName: string) => Promise<void>;
   selectSection: (section: string) => void;
   setVoice: (voice: string) => void;
@@ -77,6 +79,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   currentChunk: -1,
   rate: Number(localStorage.getItem(RATE_KEY)) || 1.0,
   error: '',
+  retryable: true,
   regenProgress: null,
   fileVersion: 0,
 
@@ -205,7 +208,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     const { classId, materialName, section, voice } = get();
     if (!classId || !materialName || !section) return;
     const generation = ++pollGeneration;
-    set({ status: 'loading', error: '' });
+    set({ status: 'loading', error: '', retryable: true });
 
     const finishReady = async () => {
       const manifest = await getAudioManifest(classId, materialName, section, voice);
@@ -241,6 +244,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
             set({
               status: 'failed',
               error: s.error || '오디오 생성에 실패했습니다. 다시 시도해 주세요.',
+              retryable: s.retryable !== false,
             });
           } else {
             set({ status: s.status });

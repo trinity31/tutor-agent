@@ -525,11 +525,15 @@ def get_audio_status(
     material_name = _nfc(material_name)
     asset = get_audio_asset(user_id, class_id, material_name, section, voice)
     if not asset:
-        return {"status": "none", "duration": 0, "error": ""}
+        return {"status": "none", "duration": 0, "error": "", "retryable": True}
+    error = asset.get("error", "")
+    # 스캔 PDF 실패는 재시도해도 동일 → 프론트에서 '다시 시도' 숨김
+    retryable = not (asset["status"] == "failed" and error == SCAN_PDF_NARRATION_ERROR)
     return {
         "status": asset["status"],
         "duration": asset["duration"],
-        "error": asset.get("error", ""),
+        "error": error,
+        "retryable": retryable,
     }
 
 
@@ -779,6 +783,15 @@ def _refine_narration_text(text: str) -> str:
         return text
 
 
+# 스캔 이미지 PDF는 텍스트 레이어가 없어 낭독 생성이 근본적으로 불가능하다.
+# 이 사유의 실패는 다시 시도해도 결과가 같으므로 프론트에서 '다시 시도'를 숨긴다.
+SCAN_PDF_NARRATION_ERROR = (
+    "이 자료는 스캔 이미지 PDF여서 낭독을 만들 수 없습니다. "
+    "글자가 텍스트로 들어 있는 PDF를 올리면 낭독이 됩니다. "
+    "(이 자료도 Q&A·퀴즈는 사용해 보실 수 있어요.)"
+)
+
+
 def generate_audio_asset(
     user_id: str, class_id: str, material_name: str, section: str, voice: str
 ):
@@ -814,11 +827,7 @@ def generate_audio_asset(
         )
         _attach_chunk_bboxes(chunks, page_bodies)
         if not chunks:
-            return _fail(
-                "이 자료는 스캔 이미지 PDF여서 낭독을 만들 수 없습니다. "
-                "글자가 텍스트로 들어 있는 PDF를 올리면 낭독이 됩니다. "
-                "(이 자료도 Q&A·퀴즈는 사용해 보실 수 있어요.)"
-            )
+            return _fail(SCAN_PDF_NARRATION_ERROR)
 
         # TTS로 보내는 실제 문자 수를 사용량으로 기록 (월 한도 검사의 근거)
         from .usage import add_usage

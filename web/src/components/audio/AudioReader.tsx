@@ -45,6 +45,7 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
     currentChunk,
     rate,
     error,
+    retryable,
     init,
     selectSection,
     setVoice,
@@ -520,12 +521,15 @@ export default function AudioReader({ classId, materialName, onAskPage }: Props)
         {(status === 'failed' || status === 'error') && (
           <div className="space-y-3">
             <p className="text-sm text-error-500">{error}</p>
-            <button
-              onClick={() => requestGeneration()}
-              className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 transition-colors"
-            >
-              다시 시도
-            </button>
+            {/* 재시도해도 결과가 같은 실패(스캔 PDF 등)면 버튼을 숨긴다 */}
+            {retryable && (
+              <button
+                onClick={() => requestGeneration()}
+                className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 transition-colors"
+              >
+                다시 시도
+              </button>
+            )}
           </div>
         )}
         {status === 'ready' && manifest && (
