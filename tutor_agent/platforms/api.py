@@ -282,13 +282,18 @@ async def upload(
 
     display_name = os.path.splitext(file.filename)[0]
 
-    MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+    # 대용량도 메모리에 한 번에 올리지 않도록 1MB씩 스트리밍 저장
+    size = 0
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=413, detail="파일 크기는 30MB 이하여야 합니다.")
-        tmp.write(content)
         tmp_path = tmp.name
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_FILE_SIZE:
+                tmp.close()
+                os.unlink(tmp_path)
+                raise HTTPException(status_code=413, detail="파일 크기는 100MB 이하여야 합니다.")
+            tmp.write(chunk)
 
     try:
         result = upload_material(user["email"], tmp_path, display_name, class_id)
