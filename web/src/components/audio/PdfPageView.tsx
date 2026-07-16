@@ -30,7 +30,6 @@ export default function PdfPageView({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [zoomed, setZoomed] = useState(false);
-  const [sliderVal, setSliderVal] = useState<number | null>(null); // 드래그 중 값(놓을 때 이동)
 
   // 재생 위치가 움직이면 수동 탐색을 해제하고 재생 페이지로 복귀
   useEffect(() => {
@@ -97,48 +96,31 @@ export default function PdfPageView({
         </button>
       )}
 
-      {/* 하단 페이지 네비 — ‹ 슬라이더 › (드래그로 특정 페이지로 점프) */}
-      <div className="absolute inset-x-3 bottom-4 flex items-center gap-2 rounded-full bg-warm-900/90 px-3 py-2 text-white backdrop-blur">
+      {/* 페이지 네비 (하단 중앙) — 재생을 따라 자동으로 넘어가며, 수동 이동은 ‹ › */}
+      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-warm-900/90 px-1.5 py-1 text-white backdrop-blur">
         <button
           onClick={() => setManualPage(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm disabled:opacity-30"
+          className="grid h-8 w-9 place-items-center rounded-full text-sm disabled:opacity-30"
         >
           ‹
         </button>
-        <input
-          type="range"
-          min={1}
-          max={Math.max(1, numPages || 1)}
-          value={sliderVal ?? page}
-          onChange={(e) => setSliderVal(Number(e.target.value))}
-          onMouseUp={() => {
-            if (sliderVal != null) setManualPage(sliderVal);
-            setSliderVal(null);
-          }}
-          onTouchEnd={() => {
-            if (sliderVal != null) setManualPage(sliderVal);
-            setSliderVal(null);
-          }}
-          className="h-1.5 flex-1 cursor-pointer accent-primary-500"
-          aria-label="페이지 이동"
-        />
-        <span className="shrink-0 whitespace-nowrap px-1 text-xs font-bold tabular-nums">
-          {sliderVal ?? page} / {numPages || '–'}
+        <span className="px-2 text-xs font-bold tabular-nums">
+          {page} / {numPages || '–'}
         </span>
         <button
           onClick={() => setManualPage(Math.min(numPages || page, page + 1))}
           disabled={numPages > 0 && page >= numPages}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm disabled:opacity-30"
+          className="grid h-8 w-9 place-items-center rounded-full text-sm disabled:opacity-30"
         >
           ›
         </button>
       </div>
 
-      {/* 확대 토글 (슬라이더 바 위) */}
+      {/* 확대 토글 (우하단) */}
       <button
         onClick={() => setZoomed((z) => !z)}
-        className="absolute bottom-16 right-3 grid h-9 w-9 place-items-center rounded-xl bg-warm-900/90 text-white backdrop-blur"
+        className="absolute bottom-4 right-3 grid h-9 w-9 place-items-center rounded-xl bg-warm-900/90 text-white backdrop-blur"
         title={zoomed ? '원래 크기' : '확대'}
       >
         {zoomed ? '⤡' : '⤢'}
