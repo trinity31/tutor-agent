@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { QuizQuestion } from '../../stores/chatStore';
+import { isCorrectAnswer, stripOptionPrefix, type QuizQuestion } from '../../stores/chatStore';
 
 export default function QuizCard({
   question,
@@ -18,12 +18,13 @@ export default function QuizCard({
   const [showResult, setShowResult] = useState(false);
 
   const correctAnswer = question.answer || question.correct || '';
-  const isCorrect = selected === correctAnswer;
 
   let options = question.options || [];
   if (!options.length && question.type?.toLowerCase().includes('o/x')) {
     options = ['O', 'X'];
   }
+
+  const isCorrect = selected != null && isCorrectAnswer(selected, correctAnswer, options);
 
   const handleSelect = (opt: string) => {
     if (showResult) return;
@@ -73,7 +74,7 @@ export default function QuizCard({
             style = isCorrect
               ? 'border-success-500 bg-success-400/10 text-success-500'
               : 'border-error-500 bg-error-500/10 text-error-500';
-          } else if (showResult && opt === correctAnswer) {
+          } else if (showResult && isCorrectAnswer(opt, correctAnswer, options)) {
             style = 'border-success-500 bg-success-400/10 text-success-500';
           } else if (showResult) {
             style = 'border-warm-100 bg-warm-50 opacity-50';
@@ -89,7 +90,7 @@ export default function QuizCard({
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warm-100 text-xs font-bold text-warm-600">
                 {String.fromCharCode(65 + i)}
               </span>
-              {opt}
+              {stripOptionPrefix(opt)}
             </button>
           );
         })}
@@ -106,7 +107,7 @@ export default function QuizCard({
             }`}
           >
             <p className="font-semibold mb-1">
-              {isCorrect ? '정답입니다!' : `오답! 정답: ${correctAnswer}`}
+              {isCorrect ? '정답입니다!' : `오답! 정답: ${stripOptionPrefix(correctAnswer)}`}
             </p>
             {question.explanation && (
               <p className="text-warm-700">{question.explanation}</p>

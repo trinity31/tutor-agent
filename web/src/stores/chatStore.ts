@@ -26,6 +26,29 @@ export interface QuizQuestion {
   explanation?: string;
 }
 
+/** 보기·정답 앞의 번호/접두어("A.", "나)", "①")와 잉여 공백을 제거한다.
+ *  LLM이 보기엔 "A. "를 붙이고 answer엔 안 붙이는 경우가 있어, 이걸 무시해야 정확히 비교된다. */
+export function stripOptionPrefix(s: string): string {
+  return (s || '')
+    .trim()
+    .replace(/^[A-Za-z0-9가-힣]\s*[.)．、]\s*/, '')
+    .replace(/^[①-⑳]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** 접두어·공백 차이를 무시하고 정답 여부를 판정한다.
+ *  answer가 보기 문자(A~D)만 있으면 실제 선택지 텍스트로 환원해 비교한다. */
+export function isCorrectAnswer(selected: string, answer: string, options: string[] = []): boolean {
+  let ans = (answer || '').trim();
+  const letter = ans.match(/^([A-Da-d])$/);
+  if (letter && options.length) {
+    const idx = letter[1].toUpperCase().charCodeAt(0) - 65;
+    if (options[idx] != null) ans = options[idx];
+  }
+  return stripOptionPrefix(selected) === stripOptionPrefix(ans);
+}
+
 interface ChatState {
   messages: Message[];
   threadId: string;
@@ -169,7 +192,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const q = quizData.questions[quizIndex];
     const correctAnswer = q.answer || q.correct || '';
-    const isCorrect = selected === correctAnswer;
+    const isCorrect = isCorrectAnswer(selected, correctAnswer, q.options || []);
 
     const newAnswer: QuizAnswer = {
       question: q.question,
