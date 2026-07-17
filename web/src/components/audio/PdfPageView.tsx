@@ -97,21 +97,21 @@ export default function PdfPageView({
       )}
 
       {/* 페이지 네비 (하단 중앙) — 재생을 따라 자동으로 넘어가며, 수동 이동은 ‹ › */}
-      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-warm-900/90 px-1.5 py-1 text-white backdrop-blur">
+      <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-warm-900/90 px-1 py-0.5 text-white backdrop-blur">
         <button
           onClick={() => setManualPage(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className="grid h-8 w-9 place-items-center rounded-full text-sm disabled:opacity-30"
+          className="grid h-[1.6rem] w-[1.8rem] place-items-center rounded-full text-xs disabled:opacity-30"
         >
           ‹
         </button>
-        <span className="px-2 text-xs font-bold tabular-nums">
+        <span className="px-1.5 text-[0.62rem] font-bold tabular-nums">
           {page} / {numPages || '–'}
         </span>
         <button
           onClick={() => setManualPage(Math.min(numPages || page, page + 1))}
           disabled={numPages > 0 && page >= numPages}
-          className="grid h-8 w-9 place-items-center rounded-full text-sm disabled:opacity-30"
+          className="grid h-[1.6rem] w-[1.8rem] place-items-center rounded-full text-xs disabled:opacity-30"
         >
           ›
         </button>
@@ -120,7 +120,7 @@ export default function PdfPageView({
       {/* 확대 토글 (우하단) */}
       <button
         onClick={() => setZoomed((z) => !z)}
-        className="absolute bottom-4 right-3 grid h-9 w-9 place-items-center rounded-xl bg-warm-900/90 text-white backdrop-blur"
+        className="absolute bottom-2 right-3 grid h-[1.8rem] w-[1.8rem] place-items-center rounded-lg bg-warm-900/90 text-sm text-white backdrop-blur"
         title={zoomed ? '원래 크기' : '확대'}
       >
         {zoomed ? '⤡' : '⤢'}
