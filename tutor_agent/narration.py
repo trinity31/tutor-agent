@@ -15,6 +15,10 @@ from collections.abc import Callable
 _HANJA = "\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
 # 한자 병기: 한글(한자) → 한글
 _HANJA_PAREN_RE = re.compile(rf"([가-힣]+)\(([{_HANJA}]+)\)")
+# 한자-한자 사이 공백 제거: 슬라이드형 PDF는 "丙火"를 "丙 火"로 벌려 추출하는데,
+# 이 상태면 앞 한자(丙)가 독립 한자로 오인돼 제거된다(丙火가→火가→화가). 공백을
+# 먼저 붙여 복합어로 복원하면, 조사 붙은 복합어는 보존되고 독음이 온전히 나온다.
+_HANJA_SPACE_RE = re.compile(rf"([{_HANJA}])[ \t　]+(?=[{_HANJA}])")
 # 독립 한자 어절: 한자로만 이루어진 어절(앞뒤에 한글·영숫자·한자가 붙지 않은 것).
 # 경계 조건에 한자(_HANJA)도 포함해야 한다 — 없으면 "丙火가"처럼 한자 복합어 뒤에
 # 한글 조사가 붙었을 때, 전체(丙火) 매칭이 조사(가)에서 실패한 뒤 백트래킹으로
@@ -94,6 +98,8 @@ def _tidy_line(line: str) -> str:
 def clean_text(text: str) -> str:
     """PDF 추출 텍스트에서 낭독에 방해되는 요소를 제거합니다."""
     text = _HANJA_PAREN_RE.sub(r"\1", text)
+    # 벌려 추출된 한자 복합어("丙 火")를 붙인 뒤에 독립 한자어를 판정한다
+    text = _HANJA_SPACE_RE.sub(r"\1", text)
     text = _HANJA_WORD_RE.sub(" ", text)
     text = _BROKEN_GLYPH_RE.sub("", text)
     text = _URL_RE.sub(" ", text)
