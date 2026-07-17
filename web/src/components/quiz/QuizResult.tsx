@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { scheduleQuizRetry } from '../../api/client';
 import { track } from '../../lib/analytics';
-import type { QuizAnswer } from '../../stores/chatStore';
+import { isCorrectAnswer, type QuizAnswer } from '../../stores/chatStore';
+
+/** 저장된 correct가 옛 채점 로직(접두어 불일치)으로 틀렸을 수 있어 다시 확인한다.
+ *  false→true로만 교정하므로(정답인데 오답 처리된 경우), 오답을 정답으로 뒤집지 않는다. */
+const isAnswerCorrect = (a: QuizAnswer): boolean =>
+  a.correct || isCorrectAnswer(a.selected, a.answer);
 
 export default function QuizResult({
   answers,
@@ -18,7 +23,7 @@ export default function QuizResult({
   const [showDatePicker, setShowDatePicker] = useState<'wrong_only' | 'full' | null>(null);
   const [dateInput, setDateInput] = useState('');
 
-  const correct = answers.filter((a) => a.correct).length;
+  const correct = answers.filter(isAnswerCorrect).length;
   const total = answers.length;
   const pct = Math.round((correct / total) * 100);
   const wrongCount = total - correct;
@@ -96,7 +101,9 @@ export default function QuizResult({
 
       {/* Review */}
       <div className="space-y-2">
-        {answers.map((a, i) => (
+        {answers.map((a, i) => {
+          const ok = isAnswerCorrect(a);
+          return (
           <div key={i} className="rounded-xl bg-white overflow-hidden shadow-sm">
             <button
               onClick={() =>
@@ -106,10 +113,10 @@ export default function QuizResult({
             >
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white ${
-                  a.correct ? 'bg-success-500' : 'bg-error-500'
+                  ok ? 'bg-success-500' : 'bg-error-500'
                 }`}
               >
-                {a.correct ? 'O' : 'X'}
+                {ok ? 'O' : 'X'}
               </span>
               <span className="flex-1 text-sm text-warm-800 truncate">
                 Q{i + 1}. {a.question}
@@ -146,7 +153,8 @@ export default function QuizResult({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Scheduling */}
