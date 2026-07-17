@@ -15,8 +15,13 @@ from collections.abc import Callable
 _HANJA = "\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
 # 한자 병기: 한글(한자) → 한글
 _HANJA_PAREN_RE = re.compile(rf"([가-힣]+)\(([{_HANJA}]+)\)")
-# 독립 한자 어절: 한자(와 구두점)로만 이루어진 어절
-_HANJA_WORD_RE = re.compile(rf"(?<![가-힣A-Za-z0-9])[{_HANJA}]+(?![가-힣A-Za-z0-9])")
+# 독립 한자 어절: 한자로만 이루어진 어절(앞뒤에 한글·영숫자·한자가 붙지 않은 것).
+# 경계 조건에 한자(_HANJA)도 포함해야 한다 — 없으면 "丙火가"처럼 한자 복합어 뒤에
+# 한글 조사가 붙었을 때, 전체(丙火) 매칭이 조사(가)에서 실패한 뒤 백트래킹으로
+# 앞 글자(丙)만 지워 "火가"→"화가"로 독음이 잘려 나간다("병화"→"화" 버그).
+_HANJA_WORD_RE = re.compile(
+    rf"(?<![가-힣A-Za-z0-9{_HANJA}])[{_HANJA}]+(?![가-힣A-Za-z0-9{_HANJA}])"
+)
 # 제어문자(탭·개행 제외), 대체문자, 사용자 영역(깨진 글리프)
 _BROKEN_GLYPH_RE = re.compile("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\ufffd\\ue000-\\uf8ff]")
 # 가운뎃점 계열 특수 구두점 → 쉼표로 (낭독 시 자연스러운 끊어읽기)
