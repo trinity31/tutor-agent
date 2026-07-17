@@ -160,15 +160,9 @@ export default function QuizResult({
       {/* Scheduling */}
       {quizResultId && !scheduledMsg && (
         <div className="mt-6 space-y-2">
-          {wrongCount > 0 && (
-            <button
-              onClick={() => handleSchedule(tomorrow(), 'wrong_only')}
-              disabled={scheduling}
-              className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-white hover:bg-amber-600 active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              내일 Slack 재시험 (틀린 {wrongCount}문제)
-            </button>
-          )}
+          <p className="mb-1 text-center text-xs text-warm-400">
+            예약일에 복습 퀴즈를 만들어 이메일로 보내드려요.
+          </p>
           {wrongCount > 0 && (
             <button
               onClick={() => setShowDatePicker('wrong_only')}
