@@ -15,7 +15,7 @@ KST = timezone(timedelta(hours=9))
 # metric 이름은 "_daily" / "_monthly" 접미사로 리셋 주기를 표현한다
 LIMITS = {
     "chat_daily": int(os.getenv("LIMIT_CHAT_DAILY", "100")),
-    "tts_chars_monthly": int(os.getenv("LIMIT_TTS_CHARS_MONTHLY", "300000")),
+    "tts_chars_monthly": int(os.getenv("LIMIT_TTS_CHARS_MONTHLY", "3000000")),
     "uploads_monthly": int(os.getenv("LIMIT_UPLOADS_MONTHLY", "20")),
 }
 
