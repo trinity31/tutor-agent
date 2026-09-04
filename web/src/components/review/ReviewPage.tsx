@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReviewStore } from '../../stores/reviewStore';
 import { completeReviewQuiz, type QuizResultRow } from '../../api/client';
-import type { QuizAnswer } from '../../stores/chatStore';
+import { isCorrectAnswer, type QuizAnswer } from '../../stores/chatStore';
 import QuizCard from '../quiz/QuizCard';
 import QuizResult from '../quiz/QuizResult';
 
@@ -40,7 +40,7 @@ export default function ReviewPage() {
       question: q.question,
       selected,
       answer: correctAnswer,
-      correct: selected === correctAnswer,
+      correct: isCorrectAnswer(selected, correctAnswer, q.options || []),
       explanation: q.explanation,
     };
     const newAnswers = [...answers, ans];
